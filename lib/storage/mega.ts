@@ -26,12 +26,13 @@ export async function getMegaStorage(): Promise<Storage | null> {
         email,
         password,
         autologin: true,
+        autoload: true,
         userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         fetch: (url: RequestInfo | URL, opts?: RequestInit) => fetch(url, { ...opts, cache: 'no-store' } as RequestInit)
       });
 
       await new Promise<void>((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('MEGA auth timeout (20s)')), 20000);
+        const timeout = setTimeout(() => reject(new Error('MEGA auth timeout (30s)')), 30000);
         storage.ready
           .then(() => {
             clearTimeout(timeout);
@@ -239,13 +240,16 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
   const storage = await getMegaStorage();
   if (!storage) return [];
 
-  try {
-    await Promise.race([
-      storage.reload(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('MEGA reload timeout')), 10000)),
-    ]);
-  } catch (err) {
-    console.warn('MEGA reload warning during scan:', err);
+  // If tree is not loaded (empty children), attempt to reload
+  if (!storage.root || !storage.root.children || storage.root.children.length === 0) {
+    try {
+      await Promise.race([
+        storage.reload(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('MEGA reload timeout')), 30000)),
+      ]);
+    } catch (err) {
+      console.warn('MEGA reload warning during scan:', err);
+    }
   }
 
   console.log(`[Diagnostic] MEGA reload complete. Nodes in memory:`, storage.root ? Object.keys((storage as any).files || {}).length : 0);
