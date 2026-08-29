@@ -26,6 +26,8 @@ export async function getMegaStorage(): Promise<Storage | null> {
         email,
         password,
         autologin: true,
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        fetch: (url: RequestInfo | URL, opts?: RequestInit) => fetch(url, { ...opts, cache: 'no-store' } as RequestInit)
       });
 
       await new Promise<void>((resolve, reject) => {
