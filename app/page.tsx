@@ -248,6 +248,10 @@ export default function Home() {
         if (xhr.status >= 200 && xhr.status < 300 && data && data.success && data.file) {
           setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'completed', provider: data.file.provider } : item)));
           addLog('output', `[SUCCESS] Uploaded "${file.name}" to ${data.file.provider}`);
+          setFiles((prev) => {
+            if (prev.some((f) => f.id === data.file.id)) return prev;
+            return [...prev, data.file];
+          });
           loadFiles();
           loadMetrics();
         } else {
@@ -498,7 +502,7 @@ export default function Home() {
     const q = commandInput.trim().toLowerCase();
     if (!q) return [];
 
-    const regularFiles = files.filter((f) => f.is_folder === 0);
+    const regularFiles = files.filter((f) => Number(f.is_folder) === 0 || !f.is_folder);
 
     if (q.startsWith('/')) {
       const fullContent = q.substring(1).trim();
