@@ -144,7 +144,7 @@ export async function uploadToMega(
   const file: any = await (uploadStream as any).complete;
 
   return {
-    remoteId: file.handle || file.name || String(Date.now()),
+    remoteId: file.nodeId || file.name || String(Date.now()),
     remotePath: file.name,
   };
 }
@@ -180,7 +180,7 @@ export async function downloadFromMega(remoteId: string, fileName?: string): Pro
   if (!targetFile && storage.root) {
     const findInNode = (node: any): any => {
       if (!node) return null;
-      if (node.name === fileName || node.name === remoteId || node.handle === remoteId) {
+      if (node.name === fileName || node.name === remoteId || node.nodeId === remoteId) {
         return node;
       }
       if (node.children && Array.isArray(node.children)) {
@@ -247,7 +247,7 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
   }
 
   const results: CloudFileNode[] = [];
-  const rootId = (storage.root as any)?.handle || 'root';
+  const rootId = (storage.root as any)?.nodeId || 'root';
 
   const walkNode = (node: any, parentRemoteId: string | null) => {
     if (!node) return;
@@ -266,7 +266,7 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
         size: node.size || 0,
         mime_type: mimeType,
         provider: 'MEGA',
-        remote_id: node.handle || node.name,
+        remote_id: node.nodeId || node.name,
         remote_path: node.name,
         is_folder: isFolder,
         parent_remote_id: parentRemoteId,
@@ -275,7 +275,7 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
     }
 
     if (node.children && Array.isArray(node.children)) {
-      const currentRemoteId = node === storage.root ? null : (node.handle || node.name);
+      const currentRemoteId = node === storage.root ? null : (node.nodeId || node.name);
       for (const child of node.children) {
         walkNode(child, currentRemoteId);
       }
