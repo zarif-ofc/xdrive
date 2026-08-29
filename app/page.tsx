@@ -217,10 +217,14 @@ export default function Home() {
   };
 
   const handleDownload = (file: FileRecord) => {
-    if (file.is_folder === 1) return;
     const a = document.createElement('a');
-    a.href = `/api/download/${file.id}`;
-    a.download = file.name;
+    if (file.is_folder === 1) {
+      a.href = `/api/download/folder/${file.id}`;
+      a.download = `${file.name}.zip`;
+    } else {
+      a.href = `/api/download/${file.id}`;
+      a.download = file.name;
+    }
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -295,7 +299,6 @@ export default function Home() {
     if (!targetArg) return;
 
     if (['down', 'download'].includes(command)) {
-      // Find matching folder or file
       const matchingFolder = files.find(
         (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
       );
@@ -307,19 +310,12 @@ export default function Home() {
             f.name.toLowerCase().includes(targetArg))
       );
 
-      if (matchingFile) {
+      if (matchingFolder) {
+        handleDownload(matchingFolder);
+        setSearchQuery('');
+      } else if (matchingFile) {
         handleDownload(matchingFile);
         setSearchQuery('');
-      } else if (matchingFolder) {
-        const folderFiles = getFilesForFolder(matchingFolder.id);
-        if (folderFiles.length === 0) {
-          alert(`Folder "${matchingFolder.name}" is empty`);
-        } else {
-          folderFiles.forEach((file, index) => {
-            setTimeout(() => handleDownload(file), index * 300);
-          });
-          setSearchQuery('');
-        }
       } else {
         alert(`No file or folder found matching "${targetArg}"`);
       }
