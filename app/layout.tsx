@@ -5,8 +5,11 @@ import './globals.css';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Xdrive — Intelligent Cloud Storage (Google Drive Clone)',
-  description: 'Full-stack Google Drive clone powered by Next.js 14, SQLite, and intelligent MEGA & Filen cloud storage routing.',
+  title: 'X>__',
+  description: 'Xdrive CLI Terminal Interface',
+  icons: {
+    icon: '/icon.svg',
+  },
 };
 
 export default function RootLayout({
@@ -16,7 +19,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className={`${inter.className} bg-drive-bg text-drive-text antialiased overflow-hidden min-h-screen`}>
+      <body className={`${inter.className} bg-black text-zinc-300 antialiased overflow-hidden min-h-screen`}>
         {children}
       </body>
     </html>
