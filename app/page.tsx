@@ -10,7 +10,7 @@ import { FilePreviewModal } from '@/components/FilePreviewModal';
 import { FileRecord } from '@/lib/db';
 import { StorageMetrics } from '@/lib/storage/router';
 import { formatBytes } from '@/lib/utils';
-import { Plus, File, Search, X, Video, Image as ImageIcon, Music, FileText, Download, Trash2 } from 'lucide-react';
+import { Plus, File, Video, Image as ImageIcon, Music, FileText, Download, Trash2, Terminal as TerminalIcon, HelpCircle } from 'lucide-react';
 
 /* Helper to strip extension from filename */
 const getDisplayName = (filename: string) => {
@@ -70,8 +70,8 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
   return parentId;
 }
 
-/* ─── Flat Minimal File Card (No Extension Shown) ─── */
-const FlatFileCard: React.FC<{
+/* ─── Terminal Style File Card ─── */
+const TerminalFileCard: React.FC<{
   file: FileRecord;
   isSelected: boolean;
   onSelect: (e: React.MouseEvent) => void;
@@ -93,23 +93,21 @@ const FlatFileCard: React.FC<{
       onClick={onSelect}
       onDoubleClick={onPreview}
       onContextMenu={onContextMenu}
-      className={`group relative flex flex-col items-center justify-between p-4 rounded-2xl cursor-pointer transition-all duration-150 w-[155px] h-[120px] border select-none ${
+      className={`group relative flex flex-col items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-150 w-[155px] h-[120px] border font-mono select-none ${
         isSelected
-          ? 'bg-[#141418] border-white'
-          : 'bg-[#0d0d0f] border-zinc-800/80 hover:bg-[#141418] hover:border-zinc-700'
+          ? 'bg-[#121214] border-[#ff2b38] text-white'
+          : 'bg-[#0a0a0c] border-zinc-800/90 hover:bg-[#121214] hover:border-zinc-700'
       }`}
     >
-      {/* Icon */}
       <div className="my-auto pt-1 flex items-center justify-center">
-        <CategoryIcon className="w-8 h-8 text-zinc-400 group-hover:text-white stroke-[1.5] transition-colors" />
+        <CategoryIcon className="w-8 h-8 text-zinc-400 group-hover:text-[#ff2b38] stroke-[1.5] transition-colors" />
       </div>
 
-      {/* Base Name (No Extension) & Size */}
       <div className="w-full text-center">
-        <p className="text-xs font-semibold text-zinc-300 group-hover:text-white truncate" title={file.name}>
+        <p className="text-xs font-medium text-zinc-300 group-hover:text-white truncate tracking-tight" title={file.name}>
           {displayName}
         </p>
-        <p className="text-[10px] text-zinc-500 font-medium">
+        <p className="text-[10px] text-zinc-500 font-normal">
           {formatBytes(file.size)}
         </p>
       </div>
@@ -119,8 +117,13 @@ const FlatFileCard: React.FC<{
 
 export default function Home() {
   const [files, setFiles] = useState<FileRecord[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [commandInput, setCommandInput] = useState('');
   const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+
+  // Terminal History Logs
+  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([
+    { id: 'welcome', type: 'output', text: 'XDRIVE CLI v1.0.0 — Type "help" or "-all", "-down <name>", "-del <name>"' },
+  ]);
 
   // Modals
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileRecord } | null>(null);
@@ -134,6 +137,7 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const terminalInputRef = useRef<HTMLInputElement>(null);
 
   // Data fetching
   const loadMetrics = useCallback(async () => {
@@ -159,6 +163,10 @@ export default function Home() {
     loadMetrics();
   }, [loadFiles, loadMetrics]);
 
+  const addLog = (type: 'input' | 'output' | 'error', text: string) => {
+    setTerminalLogs((prev) => [...prev, { id: `log_${Date.now()}_${Math.random()}`, type, text }]);
+  };
+
   // Robust Upload Handling
   const handleUploadFiles = async (fileList: FileList | File[]) => {
     const fileArray = Array.from(fileList).filter((file) => {
@@ -173,6 +181,7 @@ export default function Home() {
 
       const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       setUploads((prev) => [{ id: uploadId, name: file.name, size: file.size, progress: 10, status: 'uploading' }, ...prev]);
+      addLog('output', `[UPLOAD] Starting upload: ${file.name}`);
 
       let targetParentId: string | null = null;
       if (file.webkitRelativePath) {
@@ -200,17 +209,21 @@ export default function Home() {
           const data = JSON.parse(xhr.responseText);
           if (xhr.status >= 200 && xhr.status < 300 && data.success && data.file) {
             setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'completed', provider: data.file.provider } : item)));
+            addLog('output', `[SUCCESS] Uploaded "${file.name}" to ${data.file.provider}`);
             loadFiles();
             loadMetrics();
           } else {
             setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: data.error || 'Upload failed' } : item)));
+            addLog('error', `[ERROR] Failed uploading "${file.name}": ${data.error || 'Upload failed'}`);
           }
         } catch {
           setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Parse error' } : item)));
+          addLog('error', `[ERROR] Parse error uploading "${file.name}"`);
         }
       };
       xhr.onerror = () => {
         setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Upload failed' } : item)));
+        addLog('error', `[ERROR] Network error uploading "${file.name}"`);
       };
       xhr.send(formData);
     }
@@ -219,9 +232,11 @@ export default function Home() {
   const handleDownload = (file: FileRecord) => {
     const a = document.createElement('a');
     if (file.is_folder === 1) {
+      addLog('output', `[DOWN] Initializing zip archive download for folder "${file.name}"...`);
       a.href = `/api/download/folder/${file.id}`;
       a.download = `${file.name}.zip`;
     } else {
+      addLog('output', `[DOWN] Downloading file "${file.name}"...`);
       a.href = `/api/download/${file.id}`;
       a.download = file.name;
     }
@@ -238,7 +253,10 @@ export default function Home() {
         body: JSON.stringify({ name: newName }),
       });
       const data = await res.json();
-      if (data.success) loadFiles();
+      if (data.success) {
+        addLog('output', `[RENAME] Renamed item to "${newName}"`);
+        loadFiles();
+      }
     } catch {}
   };
 
@@ -250,7 +268,10 @@ export default function Home() {
         body: JSON.stringify({ parentId: targetFolderId }),
       });
       const data = await res.json();
-      if (data.success) loadFiles();
+      if (data.success) {
+        addLog('output', `[MOVE] Moved item successfully`);
+        loadFiles();
+      }
     } catch {}
   };
 
@@ -260,6 +281,7 @@ export default function Home() {
       const res = await fetch(`/api/files/${file.id}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
+        addLog('output', `[DELETE] Deleted "${file.name}"`);
         loadFiles();
         loadMetrics();
       }
@@ -285,65 +307,93 @@ export default function Home() {
     return files.filter((f) => f.is_folder === 0 && f.parent_id && targetFolderIds.has(f.parent_id));
   };
 
-  // Execute -down or -del commands
-  const handleExecuteCommand = async () => {
-    const q = searchQuery.trim();
-    if (!q.startsWith('-')) return;
+  // Execute terminal CLI commands on Enter
+  const handleTerminalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const rawInput = commandInput.trim();
+    if (!rawInput) return;
 
-    const fullContent = q.substring(1).trim();
-    const spaceIndex = fullContent.indexOf(' ');
-    if (spaceIndex === -1) return;
+    addLog('input', `xdrive:~$ ${rawInput}`);
 
-    const command = fullContent.substring(0, spaceIndex).toLowerCase();
-    const targetArg = fullContent.substring(spaceIndex + 1).trim().toLowerCase();
-    if (!targetArg) return;
+    const lower = rawInput.toLowerCase();
 
-    if (['down', 'download'].includes(command)) {
-      const matchingFolder = files.find(
-        (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
-      );
-      const matchingFile = files.find(
-        (f) =>
-          f.is_folder === 0 &&
-          (f.name.toLowerCase() === targetArg ||
-            getDisplayName(f.name).toLowerCase() === targetArg ||
-            f.name.toLowerCase().includes(targetArg))
-      );
+    // Command: help / ?
+    if (['help', '?'].includes(lower)) {
+      addLog('output', '── Xdrive Command Prompt Help ──');
+      addLog('output', '  -all                  List all uploaded files');
+      addLog('output', '  -vid, -img, -aud, -txt Filter files by category');
+      addLog('output', '  -foldername           View files inside a folder');
+      addLog('output', '  -down <file/folder>   Download file or zip folder');
+      addLog('output', '  -del <file/folder>    Delete file or folder');
+      addLog('output', '  clear, cls            Clear terminal log screen');
+      return;
+    }
 
-      if (matchingFolder) {
-        handleDownload(matchingFolder);
-        setSearchQuery('');
-      } else if (matchingFile) {
-        handleDownload(matchingFile);
-        setSearchQuery('');
-      } else {
-        alert(`No file or folder found matching "${targetArg}"`);
-      }
-    } else if (['del', 'delete', 'remove', 'rm'].includes(command)) {
-      const matchingFolder = files.find(
-        (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
-      );
-      const matchingFile = files.find(
-        (f) =>
-          f.is_folder === 0 &&
-          (f.name.toLowerCase() === targetArg ||
-            getDisplayName(f.name).toLowerCase() === targetArg ||
-            f.name.toLowerCase().includes(targetArg))
-      );
+    // Command: clear / cls
+    if (['clear', 'cls'].includes(lower)) {
+      setTerminalLogs([]);
+      setCommandInput('');
+      return;
+    }
 
-      const targetToDelete = matchingFolder || matchingFile;
-      if (targetToDelete) {
-        await handleDelete(targetToDelete);
-        setSearchQuery('');
-      } else {
-        alert(`No file or folder found matching "${targetArg}"`);
+    // Command: Action commands (-down / -del)
+    if (rawInput.startsWith('-')) {
+      const fullContent = rawInput.substring(1).trim();
+      const spaceIndex = fullContent.indexOf(' ');
+
+      if (spaceIndex !== -1) {
+        const cmd = fullContent.substring(0, spaceIndex).toLowerCase();
+        const targetArg = fullContent.substring(spaceIndex + 1).trim().toLowerCase();
+
+        if (['down', 'download'].includes(cmd)) {
+          const matchingFolder = files.find(
+            (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
+          );
+          const matchingFile = files.find(
+            (f) =>
+              f.is_folder === 0 &&
+              (f.name.toLowerCase() === targetArg ||
+                getDisplayName(f.name).toLowerCase() === targetArg ||
+                f.name.toLowerCase().includes(targetArg))
+          );
+
+          if (matchingFolder) {
+            handleDownload(matchingFolder);
+          } else if (matchingFile) {
+            handleDownload(matchingFile);
+          } else {
+            addLog('error', `[ERR] No file or folder found matching "${targetArg}"`);
+          }
+          return;
+        }
+
+        if (['del', 'delete', 'remove', 'rm'].includes(cmd)) {
+          const matchingFolder = files.find(
+            (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
+          );
+          const matchingFile = files.find(
+            (f) =>
+              f.is_folder === 0 &&
+              (f.name.toLowerCase() === targetArg ||
+                getDisplayName(f.name).toLowerCase() === targetArg ||
+                f.name.toLowerCase().includes(targetArg))
+          );
+
+          const targetToDelete = matchingFolder || matchingFile;
+          if (targetToDelete) {
+            await handleDelete(targetToDelete);
+          } else {
+            addLog('error', `[ERR] No file or folder found matching "${targetArg}"`);
+          }
+          return;
+        }
       }
     }
   };
 
   // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all, -down <name>, -del <name>, or -foldername)
   const getFilteredFiles = () => {
-    const q = searchQuery.trim().toLowerCase();
+    const q = commandInput.trim().toLowerCase();
     if (!q) return [];
 
     const regularFiles = files.filter((f) => f.is_folder === 0);
@@ -442,33 +492,8 @@ export default function Home() {
     return regularFiles.filter((f) => f.name.toLowerCase().includes(q));
   };
 
-  const isQueryActive = searchQuery.trim().length > 0;
+  const isQueryActive = commandInput.trim().length > 0;
   const filteredFiles = getFilteredFiles();
-
-  // Helper for active action command preview hint
-  const getActionHint = () => {
-    const q = searchQuery.trim();
-    if (!q.startsWith('-')) return null;
-
-    const fullContent = q.substring(1).trim();
-    const spaceIndex = fullContent.indexOf(' ');
-    if (spaceIndex === -1) return null;
-
-    const cmd = fullContent.substring(0, spaceIndex).toLowerCase();
-    const targetArg = fullContent.substring(spaceIndex + 1).trim();
-    if (!targetArg) return null;
-
-    if (['down', 'download'].includes(cmd)) {
-      return { icon: Download, text: `Press Enter to download "${targetArg}"`, color: 'text-emerald-400' };
-    }
-    if (['del', 'delete', 'remove', 'rm'].includes(cmd)) {
-      return { icon: Trash2, text: `Press Enter to delete "${targetArg}"`, color: 'text-red-400' };
-    }
-
-    return null;
-  };
-
-  const actionHint = getActionHint();
 
   const usedPercent = metrics ? Math.min(100, Math.round((metrics.combined.used / metrics.combined.total) * 100)) : 0;
   const usedBytes = metrics?.combined.used || 0;
@@ -477,7 +502,8 @@ export default function Home() {
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      className="h-screen w-screen bg-[#000000] text-white overflow-hidden flex flex-col select-none"
+      onClick={() => terminalInputRef.current?.focus()}
+      className="h-screen w-screen bg-[#000000] text-zinc-300 font-mono overflow-hidden flex flex-col select-none"
     >
       <DropZoneOverlay onFilesDropped={handleUploadFiles} />
 
@@ -509,80 +535,85 @@ export default function Home() {
         }}
       />
 
-      {/* ── Top Bar with Upload Button ── */}
-      <div className="flex items-center justify-end px-8 pt-6 pb-2 z-10">
-        <button
-          onClick={() => {
-            const choice = window.prompt('Type "folder" to upload a folder, or press OK to upload files');
-            if (choice === null) return;
-            if (choice.trim().toLowerCase() === 'folder') {
-              folderInputRef.current?.click();
-            } else {
-              fileInputRef.current?.click();
-            }
-          }}
-          className="w-10 h-10 rounded-full bg-[#ff2b38] hover:bg-[#ff3d4a] flex items-center justify-center transition-colors shadow-sm"
-          title="Upload file or folder"
-        >
-          <Plus className="w-5 h-5 text-white stroke-[2.5]" />
-        </button>
-      </div>
-
-      {/* ── Center Content Area ── */}
-      <main
-        className="flex-1 overflow-y-auto px-8 pt-20 pb-32 flex flex-col items-center justify-start"
-        onClick={() => setSelectedFileId(null)}
-      >
-        {/* Search Bar */}
-        <div className="w-full max-w-xl mb-4">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleExecuteCommand();
-            }}
-            className="relative w-full"
-          >
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search... (-down file/folder, -del file/folder, -vid, -img, -all)"
-              className="w-full bg-[#0d0d0f] border border-zinc-800 focus:border-[#ff2b38] text-white placeholder-zinc-600 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium outline-none transition-colors"
-            />
-            {searchQuery && (
-              <button
-                type="button"
-                onClick={() => setSearchQuery('')}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </form>
-
-          {/* Action Command Preview Hint */}
-          {actionHint && (
-            <div className="mt-2.5 flex items-center justify-center gap-2 text-xs font-semibold">
-              <actionHint.icon className={`w-3.5 h-3.5 ${actionHint.color}`} />
-              <span className={actionHint.color}>{actionHint.text}</span>
-            </div>
-          )}
+      {/* ── Top Bar Header ── */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-900 bg-black/80 z-10">
+        <div className="flex items-center gap-2">
+          <TerminalIcon className="w-4 h-4 text-[#ff2b38]" />
+          <span className="text-xs font-bold text-white tracking-wide uppercase">XDRIVE PROMPT</span>
+          <span className="text-[10px] text-zinc-600 font-medium">v1.0.0</span>
         </div>
 
-        {/* Uploaded Files Grid - Shown only when user enters a search query */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              const choice = window.prompt('Type "folder" to upload a folder, or press OK to upload files');
+              if (choice === null) return;
+              if (choice.trim().toLowerCase() === 'folder') {
+                folderInputRef.current?.click();
+              } else {
+                fileInputRef.current?.click();
+              }
+            }}
+            className="w-8 h-8 rounded-full bg-[#ff2b38] hover:bg-[#ff3d4a] flex items-center justify-center transition-colors shadow-sm"
+            title="Upload file or folder"
+          >
+            <Plus className="w-4 h-4 text-white stroke-[2.5]" />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Main Terminal Command Prompt Container ── */}
+      <main className="flex-1 overflow-y-auto px-6 py-6 flex flex-col items-start justify-start">
+        {/* Command Output Logs */}
+        <div className="w-full max-w-4xl space-y-1.5 mb-4 text-xs font-mono">
+          {terminalLogs.map((log) => (
+            <div key={log.id} className="leading-relaxed">
+              {log.type === 'input' ? (
+                <span className="text-[#ff2b38] font-bold">{log.text}</span>
+              ) : log.type === 'error' ? (
+                <span className="text-red-400">{log.text}</span>
+              ) : (
+                <span className="text-zinc-400">{log.text}</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Live Active Command Prompt Input Line */}
+        <form onSubmit={handleTerminalSubmit} className="w-full max-w-4xl flex items-center gap-2 text-sm font-mono mb-6">
+          <span className="text-[#ff2b38] font-bold shrink-0">xdrive:~$</span>
+          <div className="relative flex-1 flex items-center">
+            <input
+              ref={terminalInputRef}
+              type="text"
+              value={commandInput}
+              onChange={(e) => setCommandInput(e.target.value)}
+              placeholder="type -all, -vid, -img, -down <name>, -del <name>..."
+              autoFocus
+              className="w-full bg-transparent text-white placeholder-zinc-700 outline-none border-none font-mono text-sm caret-[#ff2b38]"
+            />
+          </div>
+        </form>
+
+        {/* Dynamic File Grid Output (Renders when typing commands or search queries) */}
         {isQueryActive && (
-          <div className="w-full max-w-4xl mt-2">
+          <div className="w-full max-w-4xl mt-2 border-t border-zinc-900/80 pt-6">
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+                Matching Results ({filteredFiles.length})
+              </span>
+            </div>
+
             {filteredFiles.length === 0 ? (
-              <div className="text-center py-16">
-                <p className="text-zinc-600 text-sm font-medium">
-                  No files matching "{searchQuery}"
+              <div className="py-10 text-center">
+                <p className="text-zinc-600 text-xs font-mono">
+                  [NO MATCHES FOUND FOR "{commandInput}"]
                 </p>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-6 justify-center sm:justify-start content-start">
+              <div className="flex flex-wrap gap-5 justify-center sm:justify-start content-start">
                 {filteredFiles.map((file) => (
-                  <FlatFileCard
+                  <TerminalFileCard
                     key={file.id}
                     file={file}
                     isSelected={selectedFileId === file.id}
@@ -605,12 +636,12 @@ export default function Home() {
         )}
       </main>
 
-      {/* ── Flat Bottom Storage Bar ── */}
-      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-1.5 pb-6 pt-8 bg-black/95 pointer-events-none z-20">
-        <span className="text-xs font-bold text-zinc-400 tracking-wider uppercase">
-          {usedPercent}% used
-          <span className="text-zinc-600 ml-2 font-medium text-[10px]">
-            {formatBytes(usedBytes)} / {formatBytes(totalBytes)}
+      {/* ── OLED Terminal Bottom Bar ── */}
+      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-1.5 pb-5 pt-6 bg-black border-t border-zinc-900 pointer-events-none z-20 font-mono">
+        <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">
+          {usedPercent}% MEMORY USED
+          <span className="text-zinc-600 ml-2 font-normal text-[10px]">
+            [{formatBytes(usedBytes)} / {formatBytes(totalBytes)}]
           </span>
         </span>
         <div className="w-80 sm:w-[440px] h-1 bg-zinc-900 rounded-full overflow-hidden">
