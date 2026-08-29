@@ -220,3 +220,71 @@ export async function deleteFromMega(remoteId: string, fileName?: string): Promi
     return false;
   }
 }
+
+export interface CloudFileNode {
+  name: string;
+  size: number;
+  mime_type: string;
+  provider: 'MEGA' | 'FILEN';
+  remote_id: string;
+  remote_path: string;
+  is_folder: number;
+  parent_remote_id: string | null;
+  timestamp: number;
+}
+
+export async function scanMegaFiles(): Promise<CloudFileNode[]> {
+  const storage = await getMegaStorage();
+  if (!storage) return [];
+
+  try {
+    await Promise.race([
+      storage.reload(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('MEGA reload timeout')), 10000)),
+    ]);
+  } catch (err) {
+    console.warn('MEGA reload warning during scan:', err);
+  }
+
+  const results: CloudFileNode[] = [];
+  const rootId = (storage.root as any)?.handle || 'root';
+
+  const walkNode = (node: any, parentRemoteId: string | null) => {
+    if (!node) return;
+
+    // Skip root node itself from being added as a file, but process its children
+    if (node !== storage.root && node.name) {
+      const isFolder = node.directory ? 1 : 0;
+      let mimeType = 'application/octet-stream';
+      if (isFolder) mimeType = 'application/x-directory';
+      else if (node.name.match(/\.(mp4|mkv|webm|avi|mov)$/i)) mimeType = 'video/mp4';
+      else if (node.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)) mimeType = 'image/jpeg';
+      else if (node.name.match(/\.(mp3|wav|ogg|flac)$/i)) mimeType = 'audio/mpeg';
+
+      results.push({
+        name: node.name,
+        size: node.size || 0,
+        mime_type: mimeType,
+        provider: 'MEGA',
+        remote_id: node.handle || node.name,
+        remote_path: node.name,
+        is_folder: isFolder,
+        parent_remote_id: parentRemoteId,
+        timestamp: node.timestamp ? node.timestamp * 1000 : Date.now(),
+      });
+    }
+
+    if (node.children && Array.isArray(node.children)) {
+      const currentRemoteId = node === storage.root ? null : (node.handle || node.name);
+      for (const child of node.children) {
+        walkNode(child, currentRemoteId);
+      }
+    }
+  };
+
+  if (storage.root) {
+    walkNode(storage.root, null);
+  }
+
+  return results;
+}

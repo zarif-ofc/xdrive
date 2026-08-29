@@ -458,15 +458,37 @@ export default function Home() {
         return;
       }
 
+      if (command === 'sync') {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        addLog('output', '[SYNC] Starting global synchronization from MEGA & Filen...');
+        setCommandInput('');
+        try {
+          const res = await fetch('/api/sync', { method: 'POST' });
+          const data = await res.json();
+          if (data.success) {
+            addLog('output', `[SUCCESS] ${data.message}`);
+            loadFiles();
+            loadMetrics();
+          } else {
+            addLog('error', `[ERR] Sync failed: ${data.error}`);
+          }
+        } catch (err: any) {
+          addLog('error', `[ERR] Sync failed: ${err.message}`);
+        }
+        return;
+      }
+
       if (['help', '?'].includes(command)) {
         addLog('input', `xdrive:~$ ${rawInput}`);
         addLog('output', '── Xdrive Command Prompt Help ──');
         addLog('output', '  /pass <password>      Authenticate terminal session');
-        addLog('output', '  /all                  List all uploaded files');
+        addLog('output', '  /all                  List all uploaded files (MEGA, Filen, Local)');
         addLog('output', '  /vid, /img, /aud, /txt Filter files by category');
+        addLog('output', '  /mega, /filen, /local Filter files by storage provider');
         addLog('output', '  /foldername           View files inside a folder');
         addLog('output', '  /down <file/folder>   Download file or zip folder');
         addLog('output', '  /del <file/folder>    Delete file or folder');
+        addLog('output', '  /sync                 Sync pre-existing files from cloud providers');
         addLog('output', '  clear, cls            Clear terminal log screen');
         return;
       }
@@ -490,6 +512,7 @@ export default function Home() {
       addLog('output', '  /foldername           View files inside a folder');
       addLog('output', '  /down <file/folder>   Download file or zip folder');
       addLog('output', '  /del <file/folder>    Delete file or folder');
+      addLog('output', '  /sync                 Sync pre-existing files from cloud providers');
       addLog('output', '  clear, cls            Clear terminal log screen');
       return;
     }

@@ -213,3 +213,58 @@ export async function deleteFromFilen(remotePath: string): Promise<boolean> {
     return false;
   }
 }
+
+import { CloudFileNode } from './mega';
+
+export async function scanFilenFiles(): Promise<CloudFileNode[]> {
+  const sdk = await getFilenStorage();
+  if (!sdk) return [];
+
+  const results: CloudFileNode[] = [];
+
+  const scanFolder = async (folderPath: string, parentRemoteId: string | null) => {
+    try {
+      const items = await sdk.fs().ls({ path: folderPath });
+      if (!items || !Array.isArray(items)) return;
+
+      for (const item of items) {
+        if (!item || !item.name) continue;
+
+        const isFolder = item.type === 'folder' ? 1 : 0;
+        let mimeType = 'application/octet-stream';
+        if (isFolder) mimeType = 'application/x-directory';
+        else if (item.name.match(/\.(mp4|mkv|webm|avi|mov)$/i)) mimeType = 'video/mp4';
+        else if (item.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)) mimeType = 'image/jpeg';
+        else if (item.name.match(/\.(mp3|wav|ogg|flac)$/i)) mimeType = 'audio/mpeg';
+
+        const remotePath = `${folderPath === '/' ? '' : folderPath}/${item.name}`;
+
+        results.push({
+          name: item.name,
+          size: item.size || 0,
+          mime_type: mimeType,
+          provider: 'FILEN',
+          remote_id: item.uuid || remotePath,
+          remote_path: remotePath,
+          is_folder: isFolder,
+          parent_remote_id: parentRemoteId,
+          timestamp: item.timestamp ? new Date(item.timestamp).getTime() : Date.now(),
+        });
+
+        if (isFolder) {
+          await scanFolder(remotePath, item.uuid || remotePath);
+        }
+      }
+    } catch (err: any) {
+      // Ignore not found if /Xdrive doesn't exist
+      if (err?.code !== 'folder_not_found') {
+        console.warn(`Filen scan error on ${folderPath}:`, err);
+      }
+    }
+  };
+
+  // We only scan /Xdrive in Filen because we don't want to sync their entire personal drive
+  await scanFolder('/Xdrive', null);
+
+  return results;
+}

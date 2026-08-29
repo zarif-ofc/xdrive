@@ -187,3 +187,62 @@ export function getFolderPath(folderId: string | null): { id: string; name: stri
 
   return trail;
 }
+
+import { CloudFileNode } from '../storage/mega';
+
+export function syncCloudFiles(nodes: CloudFileNode[]): number {
+  const db = getDb();
+  let addedOrUpdated = 0;
+
+  // Run everything inside a transaction for massive performance boost
+  const transaction = db.transaction((fileNodes: CloudFileNode[]) => {
+    // 1. Process folders first to ensure parent references resolve correctly
+    const folders = fileNodes.filter((n) => n.is_folder === 1);
+    const files = fileNodes.filter((n) => n.is_folder === 0);
+    const allNodes = [...folders, ...files];
+
+    for (const node of allNodes) {
+      const existing = db.prepare(`SELECT id, parent_id FROM files WHERE remote_id = ? AND provider = ?`).get(node.remote_id, node.provider) as any;
+      
+      let parentId = null;
+      if (node.parent_remote_id) {
+        // Find the local id of the parent using its remote_id
+        const parentRow = db.prepare(`SELECT id FROM files WHERE remote_id = ? AND provider = ?`).get(node.parent_remote_id, node.provider) as any;
+        if (parentRow) parentId = parentRow.id;
+      }
+
+      if (existing) {
+        // Update existing record
+        db.prepare(`
+          UPDATE files 
+          SET name = ?, size = ?, parent_id = ?, updated_at = ?
+          WHERE remote_id = ? AND provider = ?
+        `).run(node.name, node.size, parentId, new Date(node.timestamp).toISOString(), node.remote_id, node.provider);
+        addedOrUpdated++;
+      } else {
+        // Insert new record, use remote_id as the primary id to prevent collisions and make mapping easy
+        const newId = `synced_${node.provider.toLowerCase()}_${node.remote_id.replace(/[^a-zA-Z0-9_-]/g, '')}`;
+        db.prepare(`
+          INSERT INTO files (id, name, size, mime_type, provider, remote_id, remote_path, parent_id, is_folder, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          newId,
+          node.name,
+          node.size,
+          node.mime_type,
+          node.provider,
+          node.remote_id,
+          node.remote_path,
+          parentId,
+          node.is_folder,
+          new Date(node.timestamp).toISOString(),
+          new Date(node.timestamp).toISOString()
+        );
+        addedOrUpdated++;
+      }
+    }
+  });
+
+  transaction(nodes);
+  return addedOrUpdated;
+}
