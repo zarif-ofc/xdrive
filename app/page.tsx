@@ -194,44 +194,53 @@ export default function Home() {
     } catch {}
   };
 
-  // Keyword filtering logic — returns empty array if no search query entered
+  // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all)
   const getFilteredFiles = () => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return []; // Hide everything until user types!
+    if (!q) return []; // Hide everything until query entered
 
     const regularFiles = files.filter((f) => f.is_folder === 0);
 
-    if (['vid', 'video', 'videos'].includes(q)) {
-      return regularFiles.filter(
-        (f) =>
-          f.mime_type?.startsWith('video/') ||
-          ['mp4', 'mov', 'mkv', 'webm', 'avi'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
-      );
-    }
-    if (['img', 'image', 'images', 'photo', 'photos', 'pic', 'pics'].includes(q)) {
-      return regularFiles.filter(
-        (f) =>
-          f.mime_type?.startsWith('image/') ||
-          ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
-      );
-    }
-    if (['aud', 'audio', 'sound', 'music', 'song', 'songs'].includes(q)) {
-      return regularFiles.filter(
-        (f) =>
-          f.mime_type?.startsWith('audio/') ||
-          ['mp3', 'wav', 'flac', 'm4a', 'ogg'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
-      );
-    }
-    if (['txt', 'text', 'doc', 'docs', 'document', 'documents', 'pdf'].includes(q)) {
-      return regularFiles.filter(
-        (f) =>
-          f.mime_type?.startsWith('text/') ||
-          ['txt', 'md', 'json', 'js', 'ts', 'py', 'html', 'css', 'pdf', 'doc', 'docx'].some((ext) =>
-            f.name.toLowerCase().endsWith('.' + ext)
-          )
-      );
+    // Keyword filtering requiring leading '-'
+    if (q.startsWith('-')) {
+      const keyword = q.substring(1).trim();
+
+      if (keyword === 'all') {
+        return regularFiles;
+      }
+      if (['vid', 'video', 'videos'].includes(keyword)) {
+        return regularFiles.filter(
+          (f) =>
+            f.mime_type?.startsWith('video/') ||
+            ['mp4', 'mov', 'mkv', 'webm', 'avi'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
+        );
+      }
+      if (['img', 'image', 'images', 'photo', 'photos', 'pic', 'pics'].includes(keyword)) {
+        return regularFiles.filter(
+          (f) =>
+            f.mime_type?.startsWith('image/') ||
+            ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
+        );
+      }
+      if (['aud', 'audio', 'sound', 'music', 'song', 'songs'].includes(keyword)) {
+        return regularFiles.filter(
+          (f) =>
+            f.mime_type?.startsWith('audio/') ||
+            ['mp3', 'wav', 'flac', 'm4a', 'ogg'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
+        );
+      }
+      if (['txt', 'text', 'doc', 'docs', 'document', 'documents', 'pdf'].includes(keyword)) {
+        return regularFiles.filter(
+          (f) =>
+            f.mime_type?.startsWith('text/') ||
+            ['txt', 'md', 'json', 'js', 'ts', 'py', 'html', 'css', 'pdf', 'doc', 'docx'].some((ext) =>
+              f.name.toLowerCase().endsWith('.' + ext)
+            )
+        );
+      }
     }
 
+    // Default search by filename if no '-' prefix or unknown prefix
     return regularFiles.filter((f) => f.name.toLowerCase().includes(q));
   };
 
@@ -278,7 +287,7 @@ export default function Home() {
         className="flex-1 overflow-y-auto px-8 pt-20 pb-32 flex flex-col items-center justify-start"
         onClick={() => setSelectedFileId(null)}
       >
-        {/* Search Bar Alone */}
+        {/* Search Bar */}
         <div className="w-full max-w-xl mb-6">
           <div className="relative w-full">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 pointer-events-none" />
@@ -286,7 +295,7 @@ export default function Home() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              placeholder="Search files... (-vid, -img, -aud, -txt, -all)"
               className="w-full bg-[#0d0d0f] border border-zinc-800 focus:border-[#ff2b38] text-white placeholder-zinc-600 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium outline-none transition-colors"
             />
             {searchQuery && (
@@ -300,7 +309,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Uploaded Files Grid - Only shown when user types a search query */}
+        {/* Uploaded Files Grid - Shown only when user enters a search query */}
         {isQueryActive && (
           <div className="w-full max-w-4xl mt-2">
             {filteredFiles.length === 0 ? (
