@@ -287,7 +287,6 @@ export default function Home() {
   };
 
   const handleDelete = async (file: FileRecord) => {
-    if (!confirm(`Delete "${file.name}"?`)) return;
     try {
       const res = await fetch(`/api/files/${file.id}`, { method: 'DELETE' });
       const data = await res.json();
