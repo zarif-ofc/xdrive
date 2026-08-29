@@ -239,7 +239,8 @@ export default function Home() {
           loadFiles();
           loadMetrics();
         } else {
-          const errMsg = data?.error || (xhr.status === 413 ? 'File payload too large' : `Upload failed (${xhr.status})`);
+          const isVercelLimit = xhr.status === 413 || (file.size > 4.4 * 1024 * 1024 && xhr.status >= 400);
+          const errMsg = data?.error || (isVercelLimit ? 'File exceeds Vercel 4.5MB Serverless limit' : `Upload failed (${xhr.status})`);
           setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: errMsg } : item)));
           addLog('error', `[ERROR] Failed uploading "${file.name}": ${errMsg}`);
         }

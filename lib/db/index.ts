@@ -2,7 +2,8 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 
-const DB_PATH = path.join(process.cwd(), 'xdrive.db');
+const isVercel = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const DB_PATH = isVercel ? path.join('/tmp', 'xdrive.db') : path.join(process.cwd(), 'xdrive.db');
 
 let dbInstance: Database.Database | null = null;
 

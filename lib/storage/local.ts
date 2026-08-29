@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { Readable, PassThrough } from 'stream';
 
-const LOCAL_STORAGE_DIR = path.join(process.cwd(), '.xdrive_storage');
+const isVercel = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
+const LOCAL_STORAGE_DIR = isVercel ? path.join('/tmp', '.xdrive_storage') : path.join(process.cwd(), '.xdrive_storage');
 
 if (!fs.existsSync(LOCAL_STORAGE_DIR)) {
   fs.mkdirSync(LOCAL_STORAGE_DIR, { recursive: true });
