@@ -7,7 +7,9 @@ async function main() {
     email: process.env.MEGA_EMAIL,
     password: process.env.MEGA_PASSWORD,
     autologin: true,
-    autoload: true
+    autoload: true,
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    fetch: (url, opts) => fetch(url, { ...opts, cache: 'no-store' })
   });
 
   await storage.ready;
