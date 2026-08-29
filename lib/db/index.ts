@@ -96,7 +96,9 @@ export function listFiles(parentId: string | null = null, search?: string, sort:
       break;
   }
 
-  return db.prepare(query).all(...params) as FileRecord[];
+  const results = db.prepare(query).all(...params) as FileRecord[];
+  console.log(`[Diagnostic] listFiles(parentId=${parentId}) returned ${results.length} files. DB total records: ${(db.prepare('SELECT COUNT(*) as c FROM files').get() as any).c}`);
+  return results;
 }
 
 export function getFileById(id: string): FileRecord | undefined {
@@ -191,6 +193,7 @@ export function getFolderPath(folderId: string | null): { id: string; name: stri
 import { CloudFileNode } from '../storage/mega';
 
 export function syncCloudFiles(nodes: CloudFileNode[]): number {
+  console.log(`[Diagnostic] syncCloudFiles received ${nodes.length} nodes to sync.`);
   const db = getDb();
   let addedOrUpdated = 0;
 
@@ -244,5 +247,9 @@ export function syncCloudFiles(nodes: CloudFileNode[]): number {
   });
 
   transaction(nodes);
+  
+  const countRecord = db.prepare(`SELECT COUNT(*) as c FROM files`).get() as any;
+  console.log(`[Diagnostic] syncCloudFiles completed. Total records in DB now: ${countRecord?.c}`);
+  
   return addedOrUpdated;
 }

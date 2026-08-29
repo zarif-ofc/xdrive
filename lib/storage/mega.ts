@@ -248,6 +248,8 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
     console.warn('MEGA reload warning during scan:', err);
   }
 
+  console.log(`[Diagnostic] MEGA reload complete. Nodes in memory:`, storage.root ? Object.keys((storage as any).files || {}).length : 0);
+
   const results: CloudFileNode[] = [];
   const rootId = (storage.root as any)?.nodeId || 'root';
 
@@ -288,5 +290,6 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
     walkNode(storage.root, null);
   }
 
+  console.log(`[Diagnostic] scanMegaFiles found ${results.length} MEGA nodes.`);
   return results;
 }
