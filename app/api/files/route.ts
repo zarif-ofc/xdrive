@@ -13,7 +13,7 @@ export async function GET(req: NextRequest) {
   try {
     const isVercel = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
     
-    // Auto-sync mechanism for Vercel ephemeral /tmp database
+    let debugInfo: any = {};
     if (isVercel) {
       const stats = getStorageStatsFromDb();
       if (stats.count === 0) {
@@ -22,21 +22,27 @@ export async function GET(req: NextRequest) {
           const [megaNodes, filenNodes] = await Promise.all([
             scanMegaFiles().catch((err) => {
               console.warn('MEGA auto-sync failed:', err);
+              debugInfo.megaError = err.message;
               return [];
             }),
             scanFilenFiles().catch((err) => {
               console.warn('Filen auto-sync failed:', err);
+              debugInfo.filenError = err.message;
               return [];
             }),
           ]);
+
+          debugInfo.megaNodesCount = megaNodes.length;
+          debugInfo.filenNodesCount = filenNodes.length;
 
           const allNodes = [...megaNodes, ...filenNodes];
           if (allNodes.length > 0) {
             syncCloudFiles(allNodes);
             console.log(`[Xdrive] Auto-synced ${allNodes.length} cloud files.`);
           }
-        } catch (syncErr) {
+        } catch (syncErr: any) {
           console.warn('[Xdrive] Failed during auto-sync:', syncErr);
+          debugInfo.syncErr = syncErr.message;
         }
       }
     }
@@ -55,6 +61,7 @@ export async function GET(req: NextRequest) {
       files,
       breadcrumbs,
       currentFolderId: parentId || 'root',
+      debug: debugInfo
     });
   } catch (error: any) {
     console.error('[Xdrive] /api/files GET error:', error);
