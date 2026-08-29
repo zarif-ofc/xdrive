@@ -10,7 +10,7 @@ import { FilePreviewModal } from '@/components/FilePreviewModal';
 import { FileRecord } from '@/lib/db';
 import { StorageMetrics } from '@/lib/storage/router';
 import { formatBytes } from '@/lib/utils';
-import { Plus, File, Video, Image as ImageIcon, Music, FileText, Download, Trash2, Terminal as TerminalIcon, HelpCircle } from 'lucide-react';
+import { Plus, File, Video, Image as ImageIcon, Music, FileText, Terminal as TerminalIcon } from 'lucide-react';
 
 /* Helper to strip extension from filename */
 const getDisplayName = (filename: string) => {
@@ -70,14 +70,15 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
   return parentId;
 }
 
-/* ─── Terminal Style File Card ─── */
-const TerminalFileCard: React.FC<{
+/* ─── Terminal Style File List Item ─── */
+const TerminalFileListItem: React.FC<{
   file: FileRecord;
   isSelected: boolean;
   onSelect: (e: React.MouseEvent) => void;
   onPreview: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
-}> = ({ file, isSelected, onSelect, onPreview, onContextMenu }) => {
+  itemRef?: (node: HTMLDivElement | null) => void;
+}> = ({ file, isSelected, onSelect, onPreview, onContextMenu, itemRef }) => {
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
   const mime = file.mime_type?.toLowerCase() || '';
   const displayName = getDisplayName(file.name);
@@ -90,26 +91,32 @@ const TerminalFileCard: React.FC<{
 
   return (
     <div
+      ref={itemRef}
       onClick={onSelect}
       onDoubleClick={onPreview}
       onContextMenu={onContextMenu}
-      className={`group relative flex flex-col items-center justify-between p-4 rounded-xl cursor-pointer transition-all duration-150 w-[155px] h-[120px] border font-mono select-none ${
+      className={`group flex items-center justify-between px-4 py-2.5 rounded-lg cursor-pointer transition-all duration-100 font-mono text-xs select-none border ${
         isSelected
-          ? 'bg-[#121214] border-[#ff2b38] text-white'
-          : 'bg-[#0a0a0c] border-zinc-800/90 hover:bg-[#121214] hover:border-zinc-700'
+          ? 'bg-[#18181c] border-[#ff2b38] text-white shadow-sm'
+          : 'bg-[#0a0a0c] border-zinc-900 hover:bg-[#121215] hover:border-zinc-800 text-zinc-300'
       }`}
     >
-      <div className="my-auto pt-1 flex items-center justify-center">
-        <CategoryIcon className="w-8 h-8 text-zinc-400 group-hover:text-[#ff2b38] stroke-[1.5] transition-colors" />
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <CategoryIcon
+          className={`w-4 h-4 shrink-0 transition-colors ${
+            isSelected ? 'text-[#ff2b38]' : 'text-zinc-500 group-hover:text-zinc-300'
+          }`}
+        />
+        <span className="font-medium truncate" title={file.name}>
+          {displayName}
+        </span>
       </div>
 
-      <div className="w-full text-center">
-        <p className="text-xs font-medium text-zinc-300 group-hover:text-white truncate tracking-tight" title={file.name}>
-          {displayName}
-        </p>
-        <p className="text-[10px] text-zinc-500 font-normal">
-          {formatBytes(file.size)}
-        </p>
+      <div className="flex items-center gap-6 text-[11px] shrink-0 text-zinc-500">
+        <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 font-mono text-[10px] uppercase">
+          {file.provider}
+        </span>
+        <span className="w-20 text-right font-mono">{formatBytes(file.size)}</span>
       </div>
     </div>
   );
@@ -118,7 +125,7 @@ const TerminalFileCard: React.FC<{
 export default function Home() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [commandInput, setCommandInput] = useState('');
-  const [selectedFileId, setSelectedFileId] = useState<string | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number>(0);
 
   // Terminal History Logs
   const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([
@@ -138,6 +145,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const terminalInputRef = useRef<HTMLInputElement>(null);
+  const selectedItemRef = useRef<HTMLDivElement | null>(null);
 
   // Data fetching
   const loadMetrics = useCallback(async () => {
@@ -313,30 +321,7 @@ export default function Home() {
     const rawInput = commandInput.trim();
     if (!rawInput) return;
 
-    addLog('input', `xdrive:~$ ${rawInput}`);
-
-    const lower = rawInput.toLowerCase();
-
-    // Command: help / ?
-    if (['help', '?'].includes(lower)) {
-      addLog('output', '── Xdrive Command Prompt Help ──');
-      addLog('output', '  -all                  List all uploaded files');
-      addLog('output', '  -vid, -img, -aud, -txt Filter files by category');
-      addLog('output', '  -foldername           View files inside a folder');
-      addLog('output', '  -down <file/folder>   Download file or zip folder');
-      addLog('output', '  -del <file/folder>    Delete file or folder');
-      addLog('output', '  clear, cls            Clear terminal log screen');
-      return;
-    }
-
-    // Command: clear / cls
-    if (['clear', 'cls'].includes(lower)) {
-      setTerminalLogs([]);
-      setCommandInput('');
-      return;
-    }
-
-    // Command: Action commands (-down / -del)
+    // Check if user pressed enter to execute action command
     if (rawInput.startsWith('-')) {
       const fullContent = rawInput.substring(1).trim();
       const spaceIndex = fullContent.indexOf(' ');
@@ -346,6 +331,7 @@ export default function Home() {
         const targetArg = fullContent.substring(spaceIndex + 1).trim().toLowerCase();
 
         if (['down', 'download'].includes(cmd)) {
+          addLog('input', `xdrive:~$ ${rawInput}`);
           const matchingFolder = files.find(
             (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
           );
@@ -368,6 +354,7 @@ export default function Home() {
         }
 
         if (['del', 'delete', 'remove', 'rm'].includes(cmd)) {
+          addLog('input', `xdrive:~$ ${rawInput}`);
           const matchingFolder = files.find(
             (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
           );
@@ -388,6 +375,32 @@ export default function Home() {
           return;
         }
       }
+    }
+
+    const lower = rawInput.toLowerCase();
+
+    if (['help', '?'].includes(lower)) {
+      addLog('input', `xdrive:~$ ${rawInput}`);
+      addLog('output', '── Xdrive Command Prompt Help ──');
+      addLog('output', '  -all                  List all uploaded files');
+      addLog('output', '  -vid, -img, -aud, -txt Filter files by category');
+      addLog('output', '  -foldername           View files inside a folder');
+      addLog('output', '  -down <file/folder>   Download file or zip folder');
+      addLog('output', '  -del <file/folder>    Delete file or folder');
+      addLog('output', '  clear, cls            Clear terminal log screen');
+      return;
+    }
+
+    if (['clear', 'cls'].includes(lower)) {
+      setTerminalLogs([]);
+      setCommandInput('');
+      return;
+    }
+
+    // Default action on Enter when list items are shown: open selected item preview
+    const filtered = getFilteredFiles();
+    if (filtered.length > 0 && selectedIndex < filtered.length) {
+      setPreviewTarget(filtered[selectedIndex]);
     }
   };
 
@@ -495,6 +508,31 @@ export default function Home() {
   const isQueryActive = commandInput.trim().length > 0;
   const filteredFiles = getFilteredFiles();
 
+  // Reset selected index when query changes
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [commandInput]);
+
+  // Scroll selected item into view automatically
+  useEffect(() => {
+    if (selectedItemRef.current) {
+      selectedItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }, [selectedIndex]);
+
+  // Keyboard navigation for Up / Down Arrow keys
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isQueryActive || filteredFiles.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev + 1) % filteredFiles.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSelectedIndex((prev) => (prev - 1 + filteredFiles.length) % filteredFiles.length);
+    }
+  };
+
   const usedPercent = metrics ? Math.min(100, Math.round((metrics.combined.used / metrics.combined.total) * 100)) : 0;
   const usedBytes = metrics?.combined.used || 0;
   const totalBytes = metrics?.combined.total || 0;
@@ -580,7 +618,7 @@ export default function Home() {
         </div>
 
         {/* Live Active Command Prompt Input Line */}
-        <form onSubmit={handleTerminalSubmit} className="w-full max-w-4xl flex items-center gap-2 text-sm font-mono mb-6">
+        <form onSubmit={handleTerminalSubmit} className="w-full max-w-4xl flex items-center gap-2 text-sm font-mono mb-4">
           <span className="text-[#ff2b38] font-bold shrink-0">xdrive:~$</span>
           <div className="relative flex-1 flex items-center">
             <input
@@ -588,6 +626,7 @@ export default function Home() {
               type="text"
               value={commandInput}
               onChange={(e) => setCommandInput(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder="type -all, -vid, -img, -down <name>, -del <name>..."
               autoFocus
               className="w-full bg-transparent text-white placeholder-zinc-700 outline-none border-none font-mono text-sm caret-[#ff2b38]"
@@ -595,41 +634,44 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Dynamic File Grid Output (Renders when typing commands or search queries) */}
+        {/* Dynamic File LIST View (Navigable with Arrow Keys) */}
         {isQueryActive && (
-          <div className="w-full max-w-4xl mt-2 border-t border-zinc-900/80 pt-6">
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-                Matching Results ({filteredFiles.length})
-              </span>
+          <div className="w-full max-w-4xl mt-1 border-t border-zinc-900/80 pt-4">
+            <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
+              <span>Matching Results ({filteredFiles.length})</span>
+              <span className="text-zinc-600 font-normal text-[10px]">Use ↑ ↓ keys to navigate • Press Enter to preview</span>
             </div>
 
             {filteredFiles.length === 0 ? (
-              <div className="py-10 text-center">
+              <div className="py-8 text-center">
                 <p className="text-zinc-600 text-xs font-mono">
                   [NO MATCHES FOUND FOR "{commandInput}"]
                 </p>
               </div>
             ) : (
-              <div className="flex flex-wrap gap-5 justify-center sm:justify-start content-start">
-                {filteredFiles.map((file) => (
-                  <TerminalFileCard
-                    key={file.id}
-                    file={file}
-                    isSelected={selectedFileId === file.id}
-                    onSelect={(e) => {
-                      e.stopPropagation();
-                      setSelectedFileId(file.id);
-                    }}
-                    onPreview={() => setPreviewTarget(file)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setSelectedFileId(file.id);
-                      setContextMenu({ x: e.clientX, y: e.clientY, file });
-                    }}
-                  />
-                ))}
+              <div className="flex flex-col gap-1.5 w-full">
+                {filteredFiles.map((file, idx) => {
+                  const isSelected = idx === selectedIndex;
+                  return (
+                    <TerminalFileListItem
+                      key={file.id}
+                      file={file}
+                      isSelected={isSelected}
+                      itemRef={isSelected ? (node) => { selectedItemRef.current = node; } : undefined}
+                      onSelect={(e) => {
+                        e.stopPropagation();
+                        setSelectedIndex(idx);
+                      }}
+                      onPreview={() => setPreviewTarget(file)}
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setSelectedIndex(idx);
+                        setContextMenu({ x: e.clientX, y: e.clientY, file });
+                      }}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
