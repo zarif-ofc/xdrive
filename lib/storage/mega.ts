@@ -45,10 +45,10 @@ export async function getMegaStorage(): Promise<Storage | null> {
 
       megaStorageInstance = storage;
       return storage;
-    } catch (error) {
+    } catch (error: any) {
       console.warn('MEGA login failed or unavailable:', error);
       megaStorageInstance = null;
-      return null;
+      throw new Error(`MEGA Login Failed: ${error.message}`);
     } finally {
       megaLoginPromise = null;
     }
