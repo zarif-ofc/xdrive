@@ -199,6 +199,17 @@ export default function Home() {
     if (isAuthenticated) {
       loadFiles();
       loadMetrics();
+      
+      // Automatically run a background cloud sync to pull in any pre-existing MEGA/Filen files
+      fetch('/api/sync', { method: 'POST' })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.success && data.syncedCount > 0) {
+            loadFiles();
+            loadMetrics();
+          }
+        })
+        .catch(() => {});
     }
   }, [isAuthenticated, loadFiles, loadMetrics]);
 
