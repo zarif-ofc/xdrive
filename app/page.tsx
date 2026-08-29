@@ -19,6 +19,57 @@ const getDisplayName = (filename: string) => {
   return filename.substring(0, lastDotIndex);
 };
 
+/* Cache folder paths created during session */
+const folderIdCache = new Map<string, string>();
+
+async function ensureFolderPath(relativePath: string, currentFilesList: FileRecord[]): Promise<string | null> {
+  const parts = relativePath.split('/').filter(Boolean);
+  if (parts.length <= 1) return null;
+
+  const folderNames = parts.slice(0, -1);
+  let parentId: string | null = null;
+  const localFiles = [...currentFilesList];
+  let currentPathAcc = '';
+
+  for (const folderName of folderNames) {
+    currentPathAcc = currentPathAcc ? `${currentPathAcc}/${folderName}` : folderName;
+
+    if (folderIdCache.has(currentPathAcc)) {
+      parentId = folderIdCache.get(currentPathAcc)!;
+      continue;
+    }
+
+    let existingFolder: FileRecord | undefined = localFiles.find(
+      (f) =>
+        f.is_folder === 1 &&
+        f.name.toLowerCase() === folderName.toLowerCase() &&
+        (parentId ? f.parent_id === parentId : !f.parent_id || f.parent_id === 'root')
+    );
+
+    if (!existingFolder) {
+      try {
+        const folderRes: Response = await fetch('/api/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: folderName, parentId }),
+        });
+        const folderData: any = await folderRes.json();
+        if (folderData.success && folderData.folder) {
+          existingFolder = folderData.folder;
+          localFiles.push(folderData.folder);
+        }
+      } catch {}
+    }
+
+    if (existingFolder) {
+      parentId = existingFolder.id;
+      folderIdCache.set(currentPathAcc, existingFolder.id);
+    }
+  }
+
+  return parentId;
+}
+
 /* ─── Flat Minimal File Card (No Extension Shown) ─── */
 const FlatFileCard: React.FC<{
   file: FileRecord;
@@ -82,6 +133,7 @@ export default function Home() {
   const [metrics, setMetrics] = useState<StorageMetrics | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // Data fetching
   const loadMetrics = useCallback(async () => {
@@ -107,59 +159,27 @@ export default function Home() {
     loadMetrics();
   }, [loadFiles, loadMetrics]);
 
-/* Helper to ensure folder path exists in DB and return leaf folder ID */
-async function ensureFolderPath(relativePath: string, currentFilesList: FileRecord[]): Promise<string | null> {
-  const parts = relativePath.split('/').filter(Boolean);
-  if (parts.length <= 1) return null;
-
-  const folderNames = parts.slice(0, -1);
-  let parentId: string | null = null;
-  const localFiles = [...currentFilesList];
-
-  for (const folderName of folderNames) {
-    let existingFolder: FileRecord | undefined = localFiles.find(
-      (f) =>
-        f.is_folder === 1 &&
-        f.name.toLowerCase() === folderName.toLowerCase() &&
-        (parentId ? f.parent_id === parentId : !f.parent_id || f.parent_id === 'root')
-    );
-
-    if (!existingFolder) {
-      try {
-        const folderRes: Response = await fetch('/api/folders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: folderName, parentId }),
-        });
-        const folderData: any = await folderRes.json();
-        if (folderData.success && folderData.folder) {
-          existingFolder = folderData.folder;
-          localFiles.push(folderData.folder);
-        }
-      } catch {}
-    }
-
-    if (existingFolder) {
-      parentId = existingFolder.id;
-    }
-  }
-
-  return parentId;
-}
-
-  // Upload handling
+  // Robust Upload Handling
   const handleUploadFiles = async (fileList: FileList | File[]) => {
-    const fileArray = Array.from(fileList);
+    const fileArray = Array.from(fileList).filter((file) => {
+      return file && file.name && typeof file.size === 'number';
+    });
     if (fileArray.length === 0) return;
 
     for (const file of fileArray) {
+      // Filter out zero-byte directory placeholders
+      if (file.size === 0 && !file.type && !file.name.includes('.')) {
+        continue;
+      }
+
       const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       setUploads((prev) => [{ id: uploadId, name: file.name, size: file.size, progress: 10, status: 'uploading' }, ...prev]);
 
-      // If file has webkitRelativePath (e.g. from folder upload), ensure folder structure
       let targetParentId: string | null = null;
       if (file.webkitRelativePath) {
-        targetParentId = await ensureFolderPath(file.webkitRelativePath, files);
+        try {
+          targetParentId = await ensureFolderPath(file.webkitRelativePath, files);
+        } catch {}
       }
 
       const formData = new FormData();
@@ -191,7 +211,7 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
         }
       };
       xhr.onerror = () => {
-        setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Network error' } : item)));
+        setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Upload failed' } : item)));
       };
       xhr.send(formData);
     }
@@ -332,6 +352,7 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
     >
       <DropZoneOverlay onFilesDropped={handleUploadFiles} />
 
+      {/* Hidden File Picker Input */}
       <input
         type="file"
         ref={fileInputRef}
@@ -345,12 +366,34 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
         }}
       />
 
+      {/* Hidden Folder Picker Input */}
+      <input
+        type="file"
+        ref={folderInputRef}
+        {...({ webkitdirectory: '', directory: '' } as any)}
+        className="hidden"
+        onChange={(e) => {
+          if (e.target.files) {
+            handleUploadFiles(e.target.files);
+            e.target.value = '';
+          }
+        }}
+      />
+
       {/* ── Top Bar with Upload Button ── */}
       <div className="flex items-center justify-end px-8 pt-6 pb-2 z-10">
         <button
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            const choice = window.prompt('Type "folder" to upload a folder, or press OK to upload files');
+            if (choice === null) return;
+            if (choice.trim().toLowerCase() === 'folder') {
+              folderInputRef.current?.click();
+            } else {
+              fileInputRef.current?.click();
+            }
+          }}
           className="w-10 h-10 rounded-full bg-[#ff2b38] hover:bg-[#ff3d4a] flex items-center justify-center transition-colors shadow-sm"
-          title="Upload file"
+          title="Upload file or folder"
         >
           <Plus className="w-5 h-5 text-white stroke-[2.5]" />
         </button>
