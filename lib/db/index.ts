@@ -52,7 +52,7 @@ function initTables(db: Database.Database) {
   `);
 }
 
-export function listFiles(parentId: string | null = null, search?: string, sort: string = 'name_asc'): FileRecord[] {
+export function listFiles(parentId: string | null = null, search?: string, sort: string = 'name_asc', all: boolean = false): FileRecord[] {
   const db = getDb();
   let query = `SELECT * FROM files WHERE 1=1`;
   const params: any[] = [];
@@ -60,7 +60,7 @@ export function listFiles(parentId: string | null = null, search?: string, sort:
   if (search && search.trim() !== '') {
     query += ` AND name LIKE ?`;
     params.push(`%${search.trim()}%`);
-  } else {
+  } else if (!all && parentId !== 'all') {
     if (parentId === null || parentId === '' || parentId === 'root') {
       query += ` AND parent_id IS NULL`;
     } else {

@@ -11,7 +11,8 @@ export async function GET(req: NextRequest) {
     const search = searchParams.get('search') || undefined;
     const sort = searchParams.get('sort') || 'name_asc';
 
-    const files = listFiles(parentId, search, sort);
+    const allParam = searchParams.get('all') === 'true' || parentId === 'all';
+    const files = listFiles(parentId, search, sort, allParam);
     const breadcrumbs = getFolderPath(parentId);
 
     return NextResponse.json({

@@ -146,7 +146,7 @@ export default function Home() {
 
   const loadFiles = useCallback(async () => {
     try {
-      const res = await fetch('/api/files?sort=name_asc');
+      const res = await fetch('/api/files?all=true&sort=name_asc');
       const data = await res.json();
       if (data.success) {
         setFiles(data.files);
