@@ -752,7 +752,7 @@ export default function Home() {
               value={commandInput}
               onChange={(e) => setCommandInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder=""
+              placeholder={!isAuthenticated ? "Enter pass first.." : ""}
               autoFocus
               className="w-full bg-transparent text-white placeholder-zinc-700 outline-none border-none font-mono text-sm caret-[#ff2b38]"
             />
