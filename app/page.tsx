@@ -133,9 +133,7 @@ export default function Home() {
   const [hoveredFile, setHoveredFile] = useState<FileRecord | null>(null);
 
   // Terminal History Logs
-  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([
-    { id: 'welcome', type: 'output', text: 'XDRIVE CLI v1.0.0 — Type "help" or "-all", "-down <name>", "-del <name>"' },
-  ]);
+  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([]);
 
   // Modals
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileRecord } | null>(null);
@@ -665,7 +663,7 @@ export default function Home() {
               value={commandInput}
               onChange={(e) => setCommandInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="type -all, -vid, -img, -down <name>, -del <name>..."
+              placeholder=""
               autoFocus
               className="w-full bg-transparent text-white placeholder-zinc-700 outline-none border-none font-mono text-sm caret-[#ff2b38]"
             />
@@ -677,7 +675,6 @@ export default function Home() {
           <div className="w-full max-w-4xl mt-1 border-t border-zinc-900/80 pt-4">
             <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
               <span>Matching Results ({filteredFiles.length})</span>
-              <span className="text-zinc-600 font-normal text-[10px]">Hold Spacebar to Peek • Use ↑ ↓ to navigate</span>
             </div>
 
             {filteredFiles.length === 0 ? (
