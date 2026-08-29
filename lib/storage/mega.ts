@@ -239,6 +239,7 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
   const storage = await getMegaStorage();
   if (!storage) return [];
 
+  let reloadError = null;
   // If tree is not loaded (empty children), attempt to reload
   if (!storage.root || !storage.root.children || storage.root.children.length === 0) {
     try {
@@ -246,8 +247,9 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
         storage.reload(),
         new Promise((_, reject) => setTimeout(() => reject(new Error('MEGA reload timeout')), 30000)),
       ]);
-    } catch (err) {
+    } catch (err: any) {
       console.warn('MEGA reload warning during scan:', err);
+      reloadError = err.message;
     }
   }
 
@@ -291,6 +293,10 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
 
   if (storage.root) {
     walkNode(storage.root, null);
+  }
+
+  if (results.length === 0) {
+    throw new Error(`MEGA returned 0 nodes. Root exists: ${!!storage.root}. Children count: ${storage.root?.children?.length}. Files count: ${Object.keys((storage as any).files || {}).length}. Reload error: ${reloadError}`);
   }
 
   console.log(`[Diagnostic] scanMegaFiles found ${results.length} MEGA nodes.`);
