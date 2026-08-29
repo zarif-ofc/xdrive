@@ -228,24 +228,24 @@ export default function Home() {
         }
       };
       xhr.onload = () => {
+        let data: any = null;
         try {
-          const data = JSON.parse(xhr.responseText);
-          if (xhr.status >= 200 && xhr.status < 300 && data.success && data.file) {
-            setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'completed', provider: data.file.provider } : item)));
-            addLog('output', `[SUCCESS] Uploaded "${file.name}" to ${data.file.provider}`);
-            loadFiles();
-            loadMetrics();
-          } else {
-            setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: data.error || 'Upload failed' } : item)));
-            addLog('error', `[ERROR] Failed uploading "${file.name}": ${data.error || 'Upload failed'}`);
-          }
-        } catch {
-          setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Parse error' } : item)));
-          addLog('error', `[ERROR] Parse error uploading "${file.name}"`);
+          data = JSON.parse(xhr.responseText);
+        } catch {}
+
+        if (xhr.status >= 200 && xhr.status < 300 && data && data.success && data.file) {
+          setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'completed', provider: data.file.provider } : item)));
+          addLog('output', `[SUCCESS] Uploaded "${file.name}" to ${data.file.provider}`);
+          loadFiles();
+          loadMetrics();
+        } else {
+          const errMsg = data?.error || (xhr.status === 413 ? 'File payload too large' : `Upload failed (${xhr.status})`);
+          setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: errMsg } : item)));
+          addLog('error', `[ERROR] Failed uploading "${file.name}": ${errMsg}`);
         }
       };
       xhr.onerror = () => {
-        setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Upload failed' } : item)));
+        setUploads((prev) => prev.map((item) => (item.id === uploadId ? { ...item, progress: 100, status: 'error', errorMsg: 'Network error' } : item)));
         addLog('error', `[ERROR] Network error uploading "${file.name}"`);
       };
       xhr.send(formData);

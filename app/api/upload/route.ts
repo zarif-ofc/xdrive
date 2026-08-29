@@ -7,10 +7,20 @@ import '@/lib/storage/warmup';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+export const maxDuration = 60; // Max timeout 60 seconds
 
 export async function POST(req: NextRequest) {
   try {
-    const formData = await req.formData();
+    let formData: FormData;
+    try {
+      formData = await req.formData();
+    } catch (e: any) {
+      return NextResponse.json(
+        { success: false, error: 'Failed to parse upload payload: ' + (e?.message || 'File size too large') },
+        { status: 400 }
+      );
+    }
+
     const file = formData.get('file') as File | null;
     const parentId = formData.get('parentId') as string | null;
     const requestedProvider = formData.get('provider') as ProviderType | null;
