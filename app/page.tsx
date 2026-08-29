@@ -75,10 +75,12 @@ const TerminalFileListItem: React.FC<{
   file: FileRecord;
   isSelected: boolean;
   onSelect: (e: React.MouseEvent) => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
   onPreview: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   itemRef?: (node: HTMLDivElement | null) => void;
-}> = ({ file, isSelected, onSelect, onPreview, onContextMenu, itemRef }) => {
+}> = ({ file, isSelected, onSelect, onMouseEnter, onMouseLeave, onPreview, onContextMenu, itemRef }) => {
   const ext = file.name.split('.').pop()?.toLowerCase() || '';
   const mime = file.mime_type?.toLowerCase() || '';
   const displayName = getDisplayName(file.name);
@@ -93,6 +95,8 @@ const TerminalFileListItem: React.FC<{
     <div
       ref={itemRef}
       onClick={onSelect}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
       onDoubleClick={onPreview}
       onContextMenu={onContextMenu}
       className={`group flex items-center justify-between px-4 py-2.5 rounded-lg cursor-pointer transition-all duration-100 font-mono text-xs select-none border ${
@@ -126,6 +130,7 @@ export default function Home() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [commandInput, setCommandInput] = useState('');
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [hoveredFile, setHoveredFile] = useState<FileRecord | null>(null);
 
   // Terminal History Logs
   const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([
@@ -321,7 +326,6 @@ export default function Home() {
     const rawInput = commandInput.trim();
     if (!rawInput) return;
 
-    // Check if user pressed enter to execute action command
     if (rawInput.startsWith('-')) {
       const fullContent = rawInput.substring(1).trim();
       const spaceIndex = fullContent.indexOf(' ');
@@ -397,7 +401,6 @@ export default function Home() {
       return;
     }
 
-    // Default action on Enter when list items are shown: open selected item preview
     const filtered = getFilteredFiles();
     if (filtered.length > 0 && selectedIndex < filtered.length) {
       setPreviewTarget(filtered[selectedIndex]);
@@ -520,6 +523,42 @@ export default function Home() {
     }
   }, [selectedIndex]);
 
+  // Spacebar Quick Look peek functionality on hover or keyboard selection
+  useEffect(() => {
+    let isSpaceDown = false;
+
+    const handleWindowKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.key === ' ') {
+        // If focus is in input field and NO file is hovered/selected, allow space typing
+        const activeFile = hoveredFile || (isQueryActive && filteredFiles.length > 0 ? filteredFiles[selectedIndex] : null);
+
+        if (activeFile && !isSpaceDown) {
+          e.preventDefault();
+          isSpaceDown = true;
+          setPreviewTarget(activeFile);
+        }
+      }
+    };
+
+    const handleWindowKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.key === ' ') {
+        if (isSpaceDown) {
+          e.preventDefault();
+          isSpaceDown = false;
+          setPreviewTarget(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleWindowKeyDown);
+    window.addEventListener('keyup', handleWindowKeyUp);
+
+    return () => {
+      window.removeEventListener('keydown', handleWindowKeyDown);
+      window.removeEventListener('keyup', handleWindowKeyUp);
+    };
+  }, [hoveredFile, filteredFiles, selectedIndex, isQueryActive]);
+
   // Keyboard navigation for Up / Down Arrow keys
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isQueryActive || filteredFiles.length === 0) return;
@@ -634,12 +673,12 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Dynamic File LIST View (Navigable with Arrow Keys) */}
+        {/* Dynamic File LIST View (Navigable with Arrow Keys / Peek with Spacebar) */}
         {isQueryActive && (
           <div className="w-full max-w-4xl mt-1 border-t border-zinc-900/80 pt-4">
             <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
               <span>Matching Results ({filteredFiles.length})</span>
-              <span className="text-zinc-600 font-normal text-[10px]">Use ↑ ↓ keys to navigate • Press Enter to preview</span>
+              <span className="text-zinc-600 font-normal text-[10px]">Hold Spacebar to Peek • Use ↑ ↓ to navigate</span>
             </div>
 
             {filteredFiles.length === 0 ? (
@@ -662,6 +701,8 @@ export default function Home() {
                         e.stopPropagation();
                         setSelectedIndex(idx);
                       }}
+                      onMouseEnter={() => setHoveredFile(file)}
+                      onMouseLeave={() => setHoveredFile(null)}
                       onPreview={() => setPreviewTarget(file)}
                       onContextMenu={(e) => {
                         e.preventDefault();
