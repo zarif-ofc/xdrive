@@ -10,7 +10,7 @@ import { FilePreviewModal } from '@/components/FilePreviewModal';
 import { FileRecord } from '@/lib/db';
 import { StorageMetrics } from '@/lib/storage/router';
 import { formatBytes } from '@/lib/utils';
-import { Plus, File, Video, Image as ImageIcon, Music, FileText, Terminal as TerminalIcon } from 'lucide-react';
+import { Plus, File, Video, Image as ImageIcon, Music, FileText, Terminal as TerminalIcon, Lock, Unlock } from 'lucide-react';
 
 /* Helper to strip extension from filename */
 const getDisplayName = (filename: string) => {
@@ -132,8 +132,13 @@ export default function Home() {
   const [selectedIndex, setSelectedIndex] = useState<number>(0);
   const [hoveredFile, setHoveredFile] = useState<FileRecord | null>(null);
 
+  // Authentication State (Starts locked on every visit)
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+
   // Terminal History Logs
-  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([]);
+  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([
+    { id: 'lock_notice', type: 'error', text: '[LOCKED] Type /pass <password> to unlock Xdrive' },
+  ]);
 
   // Modals
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileRecord } | null>(null);
@@ -150,7 +155,7 @@ export default function Home() {
   const terminalInputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
 
-  // Data fetching
+  // Data fetching (only runs after authentication)
   const loadMetrics = useCallback(async () => {
     try {
       const res = await fetch('/api/storage');
@@ -170,16 +175,23 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    loadFiles();
-    loadMetrics();
-  }, [loadFiles, loadMetrics]);
+    if (isAuthenticated) {
+      loadFiles();
+      loadMetrics();
+    }
+  }, [isAuthenticated, loadFiles, loadMetrics]);
 
   const addLog = (type: 'input' | 'output' | 'error', text: string) => {
     setTerminalLogs((prev) => [...prev, { id: `log_${Date.now()}_${Math.random()}`, type, text }]);
   };
 
-  // Robust Upload Handling
+  // Upload Handling
   const handleUploadFiles = async (fileList: FileList | File[]) => {
+    if (!isAuthenticated) {
+      addLog('error', '[LOCKED] Authenticate first with /pass <password>');
+      return;
+    }
+
     const fileArray = Array.from(fileList).filter((file) => {
       return file && file.name && typeof file.size === 'number';
     });
@@ -241,6 +253,7 @@ export default function Home() {
   };
 
   const handleDownload = (file: FileRecord) => {
+    if (!isAuthenticated) return;
     const a = document.createElement('a');
     if (file.is_folder === 1) {
       addLog('output', `[DOWN] Initializing zip archive download for folder "${file.name}"...`);
@@ -257,6 +270,7 @@ export default function Home() {
   };
 
   const handleRename = async (fileId: string, newName: string) => {
+    if (!isAuthenticated) return;
     try {
       const res = await fetch(`/api/files/${fileId}`, {
         method: 'PATCH',
@@ -272,6 +286,7 @@ export default function Home() {
   };
 
   const handleMove = async (fileId: string, targetFolderId: string | null) => {
+    if (!isAuthenticated) return;
     try {
       const res = await fetch(`/api/files/${fileId}`, {
         method: 'PATCH',
@@ -287,6 +302,7 @@ export default function Home() {
   };
 
   const handleDelete = async (file: FileRecord) => {
+    if (!isAuthenticated) return;
     try {
       const res = await fetch(`/api/files/${file.id}`, { method: 'DELETE' });
       const data = await res.json();
@@ -323,59 +339,117 @@ export default function Home() {
     const rawInput = commandInput.trim();
     if (!rawInput) return;
 
-    if (rawInput.startsWith('-')) {
+    // Check for Slash Commands (e.g. /pass <pwd>, /all, /down <name>, /del <name>, /help)
+    if (rawInput.startsWith('/')) {
       const fullContent = rawInput.substring(1).trim();
       const spaceIndex = fullContent.indexOf(' ');
 
+      let command = fullContent;
+      let targetArg = '';
+
       if (spaceIndex !== -1) {
-        const cmd = fullContent.substring(0, spaceIndex).toLowerCase();
-        const targetArg = fullContent.substring(spaceIndex + 1).trim().toLowerCase();
-
-        if (['down', 'download'].includes(cmd)) {
-          addLog('input', `xdrive:~$ ${rawInput}`);
-          const matchingFolder = files.find(
-            (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
-          );
-          const matchingFile = files.find(
-            (f) =>
-              f.is_folder === 0 &&
-              (f.name.toLowerCase() === targetArg ||
-                getDisplayName(f.name).toLowerCase() === targetArg ||
-                f.name.toLowerCase().includes(targetArg))
-          );
-
-          if (matchingFolder) {
-            handleDownload(matchingFolder);
-          } else if (matchingFile) {
-            handleDownload(matchingFile);
-          } else {
-            addLog('error', `[ERR] No file or folder found matching "${targetArg}"`);
-          }
-          return;
-        }
-
-        if (['del', 'delete', 'remove', 'rm'].includes(cmd)) {
-          addLog('input', `xdrive:~$ ${rawInput}`);
-          const matchingFolder = files.find(
-            (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
-          );
-          const matchingFile = files.find(
-            (f) =>
-              f.is_folder === 0 &&
-              (f.name.toLowerCase() === targetArg ||
-                getDisplayName(f.name).toLowerCase() === targetArg ||
-                f.name.toLowerCase().includes(targetArg))
-          );
-
-          const targetToDelete = matchingFolder || matchingFile;
-          if (targetToDelete) {
-            await handleDelete(targetToDelete);
-          } else {
-            addLog('error', `[ERR] No file or folder found matching "${targetArg}"`);
-          }
-          return;
-        }
+        command = fullContent.substring(0, spaceIndex).toLowerCase();
+        targetArg = fullContent.substring(spaceIndex + 1).trim();
+      } else {
+        command = fullContent.toLowerCase();
       }
+
+      // Password Authentication Command: /pass <password>
+      if (command === 'pass') {
+        addLog('input', `xdrive:~$ /pass ${'*'.repeat(targetArg.length || 6)}`);
+        try {
+          const res = await fetch('/api/auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: targetArg }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            setIsAuthenticated(true);
+            addLog('output', '[UNLOCKED] Access granted. Welcome to Xdrive CLI v6.9.0');
+            setCommandInput('');
+          } else {
+            addLog('error', `[ERR] Invalid password. Type /pass <password>`);
+          }
+        } catch {
+          addLog('error', `[ERR] Network error verifying password.`);
+        }
+        return;
+      }
+
+      // Block all other commands if not authenticated
+      if (!isAuthenticated) {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        addLog('error', '[LOCKED] Access restricted. Type /pass <password> to unlock');
+        return;
+      }
+
+      // Action Commands (/down <target> / /del <target>)
+      if (['down', 'download'].includes(command)) {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        const targetLower = targetArg.toLowerCase();
+        const matchingFolder = files.find(
+          (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetLower || f.name.toLowerCase().includes(targetLower))
+        );
+        const matchingFile = files.find(
+          (f) =>
+            f.is_folder === 0 &&
+            (f.name.toLowerCase() === targetLower ||
+              getDisplayName(f.name).toLowerCase() === targetLower ||
+              f.name.toLowerCase().includes(targetLower))
+        );
+
+        if (matchingFolder) {
+          handleDownload(matchingFolder);
+        } else if (matchingFile) {
+          handleDownload(matchingFile);
+        } else {
+          addLog('error', `[ERR] No file or folder found matching "${targetArg}"`);
+        }
+        return;
+      }
+
+      if (['del', 'delete', 'remove', 'rm'].includes(command)) {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        const targetLower = targetArg.toLowerCase();
+        const matchingFolder = files.find(
+          (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetLower || f.name.toLowerCase().includes(targetLower))
+        );
+        const matchingFile = files.find(
+          (f) =>
+            f.is_folder === 0 &&
+            (f.name.toLowerCase() === targetLower ||
+              getDisplayName(f.name).toLowerCase() === targetLower ||
+              f.name.toLowerCase().includes(targetLower))
+        );
+
+        const targetToDelete = matchingFolder || matchingFile;
+        if (targetToDelete) {
+          await handleDelete(targetToDelete);
+        } else {
+          addLog('error', `[ERR] No file or folder found matching "${targetArg}"`);
+        }
+        return;
+      }
+
+      if (['help', '?'].includes(command)) {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        addLog('output', '── Xdrive Command Prompt Help ──');
+        addLog('output', '  /pass <password>      Authenticate terminal session');
+        addLog('output', '  /all                  List all uploaded files');
+        addLog('output', '  /vid, /img, /aud, /txt Filter files by category');
+        addLog('output', '  /foldername           View files inside a folder');
+        addLog('output', '  /down <file/folder>   Download file or zip folder');
+        addLog('output', '  /del <file/folder>    Delete file or folder');
+        addLog('output', '  clear, cls            Clear terminal log screen');
+        return;
+      }
+    }
+
+    if (!isAuthenticated) {
+      addLog('input', `xdrive:~$ ${rawInput}`);
+      addLog('error', '[LOCKED] Access restricted. Type /pass <password> to unlock');
+      return;
     }
 
     const lower = rawInput.toLowerCase();
@@ -383,11 +457,12 @@ export default function Home() {
     if (['help', '?'].includes(lower)) {
       addLog('input', `xdrive:~$ ${rawInput}`);
       addLog('output', '── Xdrive Command Prompt Help ──');
-      addLog('output', '  -all                  List all uploaded files');
-      addLog('output', '  -vid, -img, -aud, -txt Filter files by category');
-      addLog('output', '  -foldername           View files inside a folder');
-      addLog('output', '  -down <file/folder>   Download file or zip folder');
-      addLog('output', '  -del <file/folder>    Delete file or folder');
+      addLog('output', '  /pass <password>      Authenticate terminal session');
+      addLog('output', '  /all                  List all uploaded files');
+      addLog('output', '  /vid, /img, /aud, /txt Filter files by category');
+      addLog('output', '  /foldername           View files inside a folder');
+      addLog('output', '  /down <file/folder>   Download file or zip folder');
+      addLog('output', '  /del <file/folder>    Delete file or folder');
       addLog('output', '  clear, cls            Clear terminal log screen');
       return;
     }
@@ -404,14 +479,15 @@ export default function Home() {
     }
   };
 
-  // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all, -down <name>, -del <name>, or -foldername)
+  // Search logic — requiring '/' prefix for keywords (/vid, /img, /aud, /txt, /all, /down <name>, /del <name>, or /foldername)
   const getFilteredFiles = () => {
+    if (!isAuthenticated) return [];
     const q = commandInput.trim().toLowerCase();
     if (!q) return [];
 
     const regularFiles = files.filter((f) => f.is_folder === 0);
 
-    if (q.startsWith('-')) {
+    if (q.startsWith('/')) {
       const fullContent = q.substring(1).trim();
       const spaceIndex = fullContent.indexOf(' ');
 
@@ -425,7 +501,7 @@ export default function Home() {
         command = fullContent.toLowerCase();
       }
 
-      // Action Commands (-down <target> / -del <target>)
+      // Action Commands (/down <target> / /del <target>)
       if (['down', 'download', 'del', 'delete', 'remove', 'rm'].includes(command) && targetArg) {
         const matchingFolder = files.find(
           (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
@@ -477,7 +553,7 @@ export default function Home() {
         );
       }
 
-      // Check if -keyword matches a folder name (e.g. -Documents)
+      // Check if /keyword matches a folder name (e.g. /Documents)
       const allFolders = files.filter((f) => f.is_folder === 1);
       const matchingFolders = allFolders.filter(
         (folder) => folder.name.toLowerCase() === command || folder.name.toLowerCase().includes(command)
@@ -501,11 +577,11 @@ export default function Home() {
       }
     }
 
-    // Default search by filename if no '-' prefix
+    // Default search by filename if no '/' prefix
     return regularFiles.filter((f) => f.name.toLowerCase().includes(q));
   };
 
-  const isQueryActive = commandInput.trim().length > 0;
+  const isQueryActive = isAuthenticated && commandInput.trim().length > 0;
   const filteredFiles = getFilteredFiles();
 
   // Reset selected index when query changes
@@ -522,16 +598,15 @@ export default function Home() {
 
   const isSpacePeekingRef = useRef<boolean>(false);
 
-  // Spacebar Quick Look peek functionality on hover or keyboard selection
+  // Spacebar Quick Look peek functionality STRICTLY on hover over a file item
   useEffect(() => {
     const handleWindowKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.key === ' ' || e.keyCode === 32) {
-        const activeFile = hoveredFile || (isQueryActive && filteredFiles.length > 0 ? filteredFiles[selectedIndex] : null);
-
-        if (activeFile && !isSpacePeekingRef.current) {
+        // ONLY trigger peek if mouse is currently hovering over a file
+        if (hoveredFile && !isSpacePeekingRef.current) {
           e.preventDefault();
           isSpacePeekingRef.current = true;
-          setPreviewTarget(activeFile);
+          setPreviewTarget(hoveredFile);
         }
       }
     };
@@ -553,7 +628,7 @@ export default function Home() {
       window.removeEventListener('keydown', handleWindowKeyDown);
       window.removeEventListener('keyup', handleWindowKeyUp);
     };
-  }, [hoveredFile, filteredFiles, selectedIndex, isQueryActive]);
+  }, [hoveredFile]);
 
   // Keyboard navigation for Up / Down Arrow keys
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -614,11 +689,24 @@ export default function Home() {
           <TerminalIcon className="w-4 h-4 text-[#ff2b38]" />
           <span className="text-xs font-bold text-white tracking-wide uppercase">XDRIVE PROMPT</span>
           <span className="text-[10px] text-zinc-600 font-medium">v6.9.0</span>
+          {isAuthenticated ? (
+            <span className="flex items-center gap-1 ml-3 px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-400 text-[10px]">
+              <Unlock className="w-3 h-3" /> UNLOCKED
+            </span>
+          ) : (
+            <span className="flex items-center gap-1 ml-3 px-1.5 py-0.5 rounded bg-red-950/60 border border-red-800/60 text-red-400 text-[10px]">
+              <Lock className="w-3 h-3" /> LOCKED
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-4">
           <button
             onClick={() => {
+              if (!isAuthenticated) {
+                addLog('error', '[LOCKED] Authenticate first with /pass <password>');
+                return;
+              }
               const choice = window.prompt('Type "folder" to upload a folder, or press OK to upload files');
               if (choice === null) return;
               if (choice.trim().toLowerCase() === 'folder') {
@@ -671,7 +759,7 @@ export default function Home() {
           </div>
         </form>
 
-        {/* Dynamic File LIST View (Navigable with Arrow Keys / Peek with Spacebar) */}
+        {/* Dynamic File LIST View (Navigable with Arrow Keys / Peek strictly on Hover) */}
         {isQueryActive && (
           <div className="w-full max-w-4xl mt-1 border-t border-zinc-900/80 pt-4">
             <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
