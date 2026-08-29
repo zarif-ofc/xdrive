@@ -21,6 +21,7 @@ const getDisplayName = (filename: string) => {
 
 /* Cache folder paths created during session */
 const folderIdCache = new Map<string, string>();
+const folderCreationPromises = new Map<string, Promise<string | null>>();
 
 async function ensureFolderPath(relativePath: string, currentFilesList: FileRecord[]): Promise<string | null> {
   const parts = relativePath.split('/').filter(Boolean);
@@ -28,7 +29,6 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
 
   const folderNames = parts.slice(0, -1);
   let parentId: string | null = null;
-  const localFiles = [...currentFilesList];
   let currentPathAcc = '';
 
   for (const folderName of folderNames) {
@@ -39,32 +39,44 @@ async function ensureFolderPath(relativePath: string, currentFilesList: FileReco
       continue;
     }
 
-    let existingFolder: FileRecord | undefined = localFiles.find(
-      (f) =>
-        f.is_folder === 1 &&
-        f.name.toLowerCase() === folderName.toLowerCase() &&
-        (parentId ? f.parent_id === parentId : !f.parent_id || f.parent_id === 'root')
-    );
-
-    if (!existingFolder) {
-      try {
-        const folderRes: Response = await fetch('/api/folders', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: folderName, parentId }),
-        });
-        const folderData: any = await folderRes.json();
-        if (folderData.success && folderData.folder) {
-          existingFolder = folderData.folder;
-          localFiles.push(folderData.folder);
-        }
-      } catch {}
+    if (folderCreationPromises.has(currentPathAcc)) {
+      parentId = await folderCreationPromises.get(currentPathAcc)!;
+      continue;
     }
 
-    if (existingFolder) {
-      parentId = existingFolder.id;
-      folderIdCache.set(currentPathAcc, existingFolder.id);
-    }
+    const currentParentId = parentId;
+    const creationPromise = (async () => {
+      let existingFolder: FileRecord | undefined = currentFilesList.find(
+        (f) =>
+          f.is_folder === 1 &&
+          f.name.toLowerCase() === folderName.toLowerCase() &&
+          (currentParentId ? f.parent_id === currentParentId : !f.parent_id || f.parent_id === 'root')
+      );
+
+      if (!existingFolder) {
+        try {
+          const folderRes: Response = await fetch('/api/folders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name: folderName, parentId: currentParentId }),
+          });
+          const folderData: any = await folderRes.json();
+          if (folderData.success && folderData.folder) {
+            existingFolder = folderData.folder;
+            currentFilesList.push(folderData.folder);
+          }
+        } catch {}
+      }
+
+      if (existingFolder) {
+        folderIdCache.set(currentPathAcc, existingFolder.id);
+        return existingFolder.id;
+      }
+      return null;
+    })();
+
+    folderCreationPromises.set(currentPathAcc, creationPromise);
+    parentId = await creationPromise;
   }
 
   return parentId;
