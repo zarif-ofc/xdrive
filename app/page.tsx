@@ -10,7 +10,7 @@ import { FilePreviewModal } from '@/components/FilePreviewModal';
 import { FileRecord } from '@/lib/db';
 import { StorageMetrics } from '@/lib/storage/router';
 import { formatBytes } from '@/lib/utils';
-import { Plus, File, Search, X, Video, Image as ImageIcon, Music, FileText } from 'lucide-react';
+import { Plus, File, Search, X, Video, Image as ImageIcon, Music, FileText, Download, Trash2 } from 'lucide-react';
 
 /* Helper to strip extension from filename */
 const getDisplayName = (filename: string) => {
@@ -167,7 +167,6 @@ export default function Home() {
     if (fileArray.length === 0) return;
 
     for (const file of fileArray) {
-      // Filter out zero-byte directory placeholders
       if (file.size === 0 && !file.type && !file.name.includes('.')) {
         continue;
       }
@@ -263,43 +262,153 @@ export default function Home() {
     } catch {}
   };
 
-  // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all, or -foldername)
+  // Helper to get all files in a folder recursively
+  const getFilesForFolder = (folderId: string): FileRecord[] => {
+    const allFolders = files.filter((f) => f.is_folder === 1);
+    const targetFolderIds = new Set<string>([folderId]);
+
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const f of allFolders) {
+        if (f.parent_id && targetFolderIds.has(f.parent_id) && !targetFolderIds.has(f.id)) {
+          targetFolderIds.add(f.id);
+          expanded = true;
+        }
+      }
+    }
+
+    return files.filter((f) => f.is_folder === 0 && f.parent_id && targetFolderIds.has(f.parent_id));
+  };
+
+  // Execute -down or -del commands
+  const handleExecuteCommand = async () => {
+    const q = searchQuery.trim();
+    if (!q.startsWith('-')) return;
+
+    const fullContent = q.substring(1).trim();
+    const spaceIndex = fullContent.indexOf(' ');
+    if (spaceIndex === -1) return;
+
+    const command = fullContent.substring(0, spaceIndex).toLowerCase();
+    const targetArg = fullContent.substring(spaceIndex + 1).trim().toLowerCase();
+    if (!targetArg) return;
+
+    if (['down', 'download'].includes(command)) {
+      // Find matching folder or file
+      const matchingFolder = files.find(
+        (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
+      );
+      const matchingFile = files.find(
+        (f) =>
+          f.is_folder === 0 &&
+          (f.name.toLowerCase() === targetArg ||
+            getDisplayName(f.name).toLowerCase() === targetArg ||
+            f.name.toLowerCase().includes(targetArg))
+      );
+
+      if (matchingFile) {
+        handleDownload(matchingFile);
+        setSearchQuery('');
+      } else if (matchingFolder) {
+        const folderFiles = getFilesForFolder(matchingFolder.id);
+        if (folderFiles.length === 0) {
+          alert(`Folder "${matchingFolder.name}" is empty`);
+        } else {
+          folderFiles.forEach((file, index) => {
+            setTimeout(() => handleDownload(file), index * 300);
+          });
+          setSearchQuery('');
+        }
+      } else {
+        alert(`No file or folder found matching "${targetArg}"`);
+      }
+    } else if (['del', 'delete', 'remove', 'rm'].includes(command)) {
+      const matchingFolder = files.find(
+        (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
+      );
+      const matchingFile = files.find(
+        (f) =>
+          f.is_folder === 0 &&
+          (f.name.toLowerCase() === targetArg ||
+            getDisplayName(f.name).toLowerCase() === targetArg ||
+            f.name.toLowerCase().includes(targetArg))
+      );
+
+      const targetToDelete = matchingFolder || matchingFile;
+      if (targetToDelete) {
+        await handleDelete(targetToDelete);
+        setSearchQuery('');
+      } else {
+        alert(`No file or folder found matching "${targetArg}"`);
+      }
+    }
+  };
+
+  // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all, -down <name>, -del <name>, or -foldername)
   const getFilteredFiles = () => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return []; // Hide everything until query entered
+    if (!q) return [];
 
     const regularFiles = files.filter((f) => f.is_folder === 0);
 
-    // Keyword filtering requiring leading '-'
     if (q.startsWith('-')) {
-      const rawKeyword = q.substring(1).trim();
-      const keyword = rawKeyword.toLowerCase();
+      const fullContent = q.substring(1).trim();
+      const spaceIndex = fullContent.indexOf(' ');
 
-      if (keyword === 'all') {
+      let command = fullContent;
+      let targetArg = '';
+
+      if (spaceIndex !== -1) {
+        command = fullContent.substring(0, spaceIndex).toLowerCase();
+        targetArg = fullContent.substring(spaceIndex + 1).trim().toLowerCase();
+      } else {
+        command = fullContent.toLowerCase();
+      }
+
+      // Action Commands (-down <target> / -del <target>)
+      if (['down', 'download', 'del', 'delete', 'remove', 'rm'].includes(command) && targetArg) {
+        const matchingFolder = files.find(
+          (f) => f.is_folder === 1 && (f.name.toLowerCase() === targetArg || f.name.toLowerCase().includes(targetArg))
+        );
+
+        if (matchingFolder) {
+          return getFilesForFolder(matchingFolder.id);
+        }
+
+        return regularFiles.filter(
+          (f) =>
+            f.name.toLowerCase().includes(targetArg) ||
+            getDisplayName(f.name).toLowerCase().includes(targetArg)
+        );
+      }
+
+      // Keyword Category Filters
+      if (command === 'all') {
         return regularFiles;
       }
-      if (['vid', 'video', 'videos'].includes(keyword)) {
+      if (['vid', 'video', 'videos'].includes(command)) {
         return regularFiles.filter(
           (f) =>
             f.mime_type?.startsWith('video/') ||
             ['mp4', 'mov', 'mkv', 'webm', 'avi'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
         );
       }
-      if (['img', 'image', 'images', 'photo', 'photos', 'pic', 'pics'].includes(keyword)) {
+      if (['img', 'image', 'images', 'photo', 'photos', 'pic', 'pics'].includes(command)) {
         return regularFiles.filter(
           (f) =>
             f.mime_type?.startsWith('image/') ||
             ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
         );
       }
-      if (['aud', 'audio', 'sound', 'music', 'song', 'songs'].includes(keyword)) {
+      if (['aud', 'audio', 'sound', 'music', 'song', 'songs'].includes(command)) {
         return regularFiles.filter(
           (f) =>
             f.mime_type?.startsWith('audio/') ||
             ['mp3', 'wav', 'flac', 'm4a', 'ogg'].some((ext) => f.name.toLowerCase().endsWith('.' + ext))
         );
       }
-      if (['txt', 'text', 'doc', 'docs', 'document', 'documents', 'pdf'].includes(keyword)) {
+      if (['txt', 'text', 'doc', 'docs', 'document', 'documents', 'pdf'].includes(command)) {
         return regularFiles.filter(
           (f) =>
             f.mime_type?.startsWith('text/') ||
@@ -312,13 +421,12 @@ export default function Home() {
       // Check if -keyword matches a folder name (e.g. -Documents)
       const allFolders = files.filter((f) => f.is_folder === 1);
       const matchingFolders = allFolders.filter(
-        (folder) => folder.name.toLowerCase() === keyword || folder.name.toLowerCase().includes(keyword)
+        (folder) => folder.name.toLowerCase() === command || folder.name.toLowerCase().includes(command)
       );
 
       if (matchingFolders.length > 0) {
         const targetFolderIds = new Set(matchingFolders.map((f) => f.id));
 
-        // Recursively include all nested subfolder IDs
         let expanded = true;
         while (expanded) {
           expanded = false;
@@ -334,12 +442,37 @@ export default function Home() {
       }
     }
 
-    // Default search by filename if no '-' prefix or unknown prefix
+    // Default search by filename if no '-' prefix
     return regularFiles.filter((f) => f.name.toLowerCase().includes(q));
   };
 
   const isQueryActive = searchQuery.trim().length > 0;
   const filteredFiles = getFilteredFiles();
+
+  // Helper for active action command preview hint
+  const getActionHint = () => {
+    const q = searchQuery.trim();
+    if (!q.startsWith('-')) return null;
+
+    const fullContent = q.substring(1).trim();
+    const spaceIndex = fullContent.indexOf(' ');
+    if (spaceIndex === -1) return null;
+
+    const cmd = fullContent.substring(0, spaceIndex).toLowerCase();
+    const targetArg = fullContent.substring(spaceIndex + 1).trim();
+    if (!targetArg) return null;
+
+    if (['down', 'download'].includes(cmd)) {
+      return { icon: Download, text: `Press Enter to download "${targetArg}"`, color: 'text-emerald-400' };
+    }
+    if (['del', 'delete', 'remove', 'rm'].includes(cmd)) {
+      return { icon: Trash2, text: `Press Enter to delete "${targetArg}"`, color: 'text-red-400' };
+    }
+
+    return null;
+  };
+
+  const actionHint = getActionHint();
 
   const usedPercent = metrics ? Math.min(100, Math.round((metrics.combined.used / metrics.combined.total) * 100)) : 0;
   const usedBytes = metrics?.combined.used || 0;
@@ -405,25 +538,40 @@ export default function Home() {
         onClick={() => setSelectedFileId(null)}
       >
         {/* Search Bar */}
-        <div className="w-full max-w-xl mb-6">
-          <div className="relative w-full">
+        <div className="w-full max-w-xl mb-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleExecuteCommand();
+            }}
+            className="relative w-full"
+          >
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-500 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search files... (-foldername, -vid, -img, -aud, -txt, -all)"
+              placeholder="Search... (-down file/folder, -del file/folder, -vid, -img, -all)"
               className="w-full bg-[#0d0d0f] border border-zinc-800 focus:border-[#ff2b38] text-white placeholder-zinc-600 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium outline-none transition-colors"
             />
             {searchQuery && (
               <button
+                type="button"
                 onClick={() => setSearchQuery('')}
                 className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors"
               >
                 <X className="w-4 h-4" />
               </button>
             )}
-          </div>
+          </form>
+
+          {/* Action Command Preview Hint */}
+          {actionHint && (
+            <div className="mt-2.5 flex items-center justify-center gap-2 text-xs font-semibold">
+              <actionHint.icon className={`w-3.5 h-3.5 ${actionHint.color}`} />
+              <span className={actionHint.color}>{actionHint.text}</span>
+            </div>
+          )}
         </div>
 
         {/* Uploaded Files Grid - Shown only when user enters a search query */}
