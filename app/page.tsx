@@ -475,8 +475,9 @@ export default function Home() {
       addLog('input', `xdrive:~$ ${rawInput}`);
       addLog('output', '── Xdrive Command Prompt Help ──');
       addLog('output', '  /pass <password>      Authenticate terminal session');
-      addLog('output', '  /all                  List all uploaded files');
+      addLog('output', '  /all                  List all uploaded files (MEGA, Filen, Local)');
       addLog('output', '  /vid, /img, /aud, /txt Filter files by category');
+      addLog('output', '  /mega, /filen, /local Filter files by storage provider');
       addLog('output', '  /foldername           View files inside a folder');
       addLog('output', '  /down <file/folder>   Download file or zip folder');
       addLog('output', '  /del <file/folder>    Delete file or folder');
@@ -570,8 +571,19 @@ export default function Home() {
         );
       }
 
+      // Provider Filters
+      if (command === 'mega') {
+        return regularFiles.filter((f) => f.provider === 'MEGA');
+      }
+      if (command === 'filen') {
+        return regularFiles.filter((f) => f.provider === 'FILEN');
+      }
+      if (command === 'local') {
+        return regularFiles.filter((f) => f.provider === 'LOCAL');
+      }
+
       // Check if /keyword matches a folder name (e.g. /Documents)
-      const allFolders = files.filter((f) => f.is_folder === 1);
+      const allFolders = files.filter((f) => Number(f.is_folder) === 1);
       const matchingFolders = allFolders.filter(
         (folder) => folder.name.toLowerCase() === command || folder.name.toLowerCase().includes(command)
       );
@@ -590,12 +602,19 @@ export default function Home() {
           }
         }
 
-        return regularFiles.filter((file) => file.parent_id && targetFolderIds.has(file.parent_id));
+        const folderFiles = regularFiles.filter((file) => file.parent_id && targetFolderIds.has(file.parent_id));
+        const nameMatches = regularFiles.filter((f) => f.name.toLowerCase().includes(command));
+        return Array.from(new Set([...folderFiles, ...nameMatches]));
       }
     }
 
-    // Default search by filename if no '/' prefix
-    return regularFiles.filter((f) => f.name.toLowerCase().includes(q));
+    // Default search by filename, display name, or provider
+    return regularFiles.filter(
+      (f) =>
+        f.name.toLowerCase().includes(q) ||
+        f.provider.toLowerCase().includes(q) ||
+        getDisplayName(f.name).toLowerCase().includes(q)
+    );
   };
 
   const isQueryActive = isAuthenticated && commandInput.trim().length > 0;
