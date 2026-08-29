@@ -107,6 +107,46 @@ export default function Home() {
     loadMetrics();
   }, [loadFiles, loadMetrics]);
 
+/* Helper to ensure folder path exists in DB and return leaf folder ID */
+async function ensureFolderPath(relativePath: string, currentFilesList: FileRecord[]): Promise<string | null> {
+  const parts = relativePath.split('/').filter(Boolean);
+  if (parts.length <= 1) return null;
+
+  const folderNames = parts.slice(0, -1);
+  let parentId: string | null = null;
+  const localFiles = [...currentFilesList];
+
+  for (const folderName of folderNames) {
+    let existingFolder: FileRecord | undefined = localFiles.find(
+      (f) =>
+        f.is_folder === 1 &&
+        f.name.toLowerCase() === folderName.toLowerCase() &&
+        (parentId ? f.parent_id === parentId : !f.parent_id || f.parent_id === 'root')
+    );
+
+    if (!existingFolder) {
+      try {
+        const folderRes: Response = await fetch('/api/folders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: folderName, parentId }),
+        });
+        const folderData: any = await folderRes.json();
+        if (folderData.success && folderData.folder) {
+          existingFolder = folderData.folder;
+          localFiles.push(folderData.folder);
+        }
+      } catch {}
+    }
+
+    if (existingFolder) {
+      parentId = existingFolder.id;
+    }
+  }
+
+  return parentId;
+}
+
   // Upload handling
   const handleUploadFiles = async (fileList: FileList | File[]) => {
     const fileArray = Array.from(fileList);
@@ -116,8 +156,17 @@ export default function Home() {
       const uploadId = `upload_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       setUploads((prev) => [{ id: uploadId, name: file.name, size: file.size, progress: 10, status: 'uploading' }, ...prev]);
 
+      // If file has webkitRelativePath (e.g. from folder upload), ensure folder structure
+      let targetParentId: string | null = null;
+      if (file.webkitRelativePath) {
+        targetParentId = await ensureFolderPath(file.webkitRelativePath, files);
+      }
+
       const formData = new FormData();
       formData.append('file', file);
+      if (targetParentId) {
+        formData.append('parentId', targetParentId);
+      }
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/api/upload', true);
@@ -194,7 +243,7 @@ export default function Home() {
     } catch {}
   };
 
-  // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all)
+  // Search logic — requiring '-' prefix for keywords (-vid, -img, -aud, -txt, -all, or -foldername)
   const getFilteredFiles = () => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return []; // Hide everything until query entered
@@ -203,7 +252,8 @@ export default function Home() {
 
     // Keyword filtering requiring leading '-'
     if (q.startsWith('-')) {
-      const keyword = q.substring(1).trim();
+      const rawKeyword = q.substring(1).trim();
+      const keyword = rawKeyword.toLowerCase();
 
       if (keyword === 'all') {
         return regularFiles;
@@ -237,6 +287,30 @@ export default function Home() {
               f.name.toLowerCase().endsWith('.' + ext)
             )
         );
+      }
+
+      // Check if -keyword matches a folder name (e.g. -Documents)
+      const allFolders = files.filter((f) => f.is_folder === 1);
+      const matchingFolders = allFolders.filter(
+        (folder) => folder.name.toLowerCase() === keyword || folder.name.toLowerCase().includes(keyword)
+      );
+
+      if (matchingFolders.length > 0) {
+        const targetFolderIds = new Set(matchingFolders.map((f) => f.id));
+
+        // Recursively include all nested subfolder IDs
+        let expanded = true;
+        while (expanded) {
+          expanded = false;
+          for (const f of allFolders) {
+            if (f.parent_id && targetFolderIds.has(f.parent_id) && !targetFolderIds.has(f.id)) {
+              targetFolderIds.add(f.id);
+              expanded = true;
+            }
+          }
+        }
+
+        return regularFiles.filter((file) => file.parent_id && targetFolderIds.has(file.parent_id));
       }
     }
 
@@ -295,7 +369,7 @@ export default function Home() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search files... (-vid, -img, -aud, -txt, -all)"
+              placeholder="Search files... (-foldername, -vid, -img, -aud, -txt, -all)"
               className="w-full bg-[#0d0d0f] border border-zinc-800 focus:border-[#ff2b38] text-white placeholder-zinc-600 rounded-2xl py-3.5 pl-12 pr-10 text-base font-medium outline-none transition-colors"
             />
             {searchQuery && (
