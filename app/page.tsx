@@ -614,7 +614,7 @@ export default function Home() {
         <div className="flex items-center gap-2">
           <TerminalIcon className="w-4 h-4 text-[#ff2b38]" />
           <span className="text-xs font-bold text-white tracking-wide uppercase">XDRIVE PROMPT</span>
-          <span className="text-[10px] text-zinc-600 font-medium">v1.0.0</span>
+          <span className="text-[10px] text-zinc-600 font-medium">v6.9.0</span>
         </div>
 
         <div className="flex items-center gap-4">
@@ -637,24 +637,26 @@ export default function Home() {
       </div>
 
       {/* ── Main Terminal Command Prompt Container ── */}
-      <main className="flex-1 overflow-y-auto px-6 py-6 flex flex-col items-start justify-start">
+      <main className="flex-1 overflow-y-auto px-6 py-3 flex flex-col items-start justify-start">
         {/* Command Output Logs */}
-        <div className="w-full max-w-4xl space-y-1.5 mb-4 text-xs font-mono">
-          {terminalLogs.map((log) => (
-            <div key={log.id} className="leading-relaxed">
-              {log.type === 'input' ? (
-                <span className="text-[#ff2b38] font-bold">{log.text}</span>
-              ) : log.type === 'error' ? (
-                <span className="text-red-400">{log.text}</span>
-              ) : (
-                <span className="text-zinc-400">{log.text}</span>
-              )}
-            </div>
-          ))}
-        </div>
+        {terminalLogs.length > 0 && (
+          <div className="w-full max-w-4xl space-y-1.5 mb-2 text-xs font-mono">
+            {terminalLogs.map((log) => (
+              <div key={log.id} className="leading-relaxed">
+                {log.type === 'input' ? (
+                  <span className="text-[#ff2b38] font-bold">{log.text}</span>
+                ) : log.type === 'error' ? (
+                  <span className="text-red-400">{log.text}</span>
+                ) : (
+                  <span className="text-zinc-400">{log.text}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Live Active Command Prompt Input Line */}
-        <form onSubmit={handleTerminalSubmit} className="w-full max-w-4xl flex items-center gap-2 text-sm font-mono mb-4">
+        <form onSubmit={handleTerminalSubmit} className="w-full max-w-4xl flex items-center gap-2 text-sm font-mono mb-2">
           <span className="text-[#ff2b38] font-bold shrink-0">xdrive:~$</span>
           <div className="relative flex-1 flex items-center">
             <input
