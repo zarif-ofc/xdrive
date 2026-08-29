@@ -523,28 +523,27 @@ export default function Home() {
     }
   }, [selectedIndex]);
 
+  const isSpacePeekingRef = useRef<boolean>(false);
+
   // Spacebar Quick Look peek functionality on hover or keyboard selection
   useEffect(() => {
-    let isSpaceDown = false;
-
     const handleWindowKeyDown = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.key === ' ') {
-        // If focus is in input field and NO file is hovered/selected, allow space typing
+      if (e.code === 'Space' || e.key === ' ' || e.keyCode === 32) {
         const activeFile = hoveredFile || (isQueryActive && filteredFiles.length > 0 ? filteredFiles[selectedIndex] : null);
 
-        if (activeFile && !isSpaceDown) {
+        if (activeFile && !isSpacePeekingRef.current) {
           e.preventDefault();
-          isSpaceDown = true;
+          isSpacePeekingRef.current = true;
           setPreviewTarget(activeFile);
         }
       }
     };
 
     const handleWindowKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space' || e.key === ' ') {
-        if (isSpaceDown) {
+      if (e.code === 'Space' || e.key === ' ' || e.keyCode === 32) {
+        if (isSpacePeekingRef.current) {
           e.preventDefault();
-          isSpaceDown = false;
+          isSpacePeekingRef.current = false;
           setPreviewTarget(null);
         }
       }
