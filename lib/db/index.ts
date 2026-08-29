@@ -107,8 +107,18 @@ export function getFileById(id: string): FileRecord | undefined {
 export function createFileRecord(data: Omit<FileRecord, 'created_at' | 'updated_at'>): FileRecord {
   const db = getDb();
   const now = new Date().toISOString();
+
+  let parentId = data.parent_id;
+  if (parentId) {
+    const parentExists = db.prepare(`SELECT id FROM files WHERE id = ?`).get(parentId);
+    if (!parentExists) {
+      parentId = null;
+    }
+  }
+
   const record: FileRecord = {
     ...data,
+    parent_id: parentId,
     created_at: now,
     updated_at: now,
   };

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { executeStorageUpload, ProviderType } from '@/lib/storage/router';
-import { createFileRecord } from '@/lib/db';
+import { createFileRecord, getFileById } from '@/lib/db';
 
 // Trigger warmup so auth is already in progress before first upload
 import '@/lib/storage/warmup';
@@ -22,11 +22,20 @@ export async function POST(req: NextRequest) {
     }
 
     const file = formData.get('file') as File | null;
-    const parentId = formData.get('parentId') as string | null;
+    const rawParentId = formData.get('parentId') as string | null;
     const requestedProvider = formData.get('provider') as ProviderType | null;
 
     if (!file) {
       return NextResponse.json({ success: false, error: 'No file uploaded' }, { status: 400 });
+    }
+
+    // Ensure parentId actually exists in DB to prevent FOREIGN KEY constraint failures
+    let validParentId: string | null = null;
+    if (rawParentId && rawParentId !== 'root') {
+      const parentRecord = getFileById(rawParentId);
+      if (parentRecord) {
+        validParentId = rawParentId;
+      }
     }
 
     const fileName = file.name;
@@ -53,7 +62,7 @@ export async function POST(req: NextRequest) {
       provider: uploadResult.provider,
       remote_id: uploadResult.remoteId,
       remote_path: uploadResult.remotePath,
-      parent_id: parentId && parentId !== 'root' ? parentId : null,
+      parent_id: validParentId,
       is_folder: 0,
     });
 
