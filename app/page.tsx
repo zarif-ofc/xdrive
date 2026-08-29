@@ -180,8 +180,17 @@ export default function Home() {
     try {
       const res = await fetch('/api/files?all=true&sort=name_asc');
       const data = await res.json();
-      if (data.success) {
-        setFiles(data.files);
+      if (data.success && Array.isArray(data.files)) {
+        setFiles((prev) => {
+          const newFilesMap = new Map<string, FileRecord>(data.files.map((f: FileRecord) => [f.id, f]));
+          // Preserve items already in state (useful for Vercel ephemeral DBs)
+          prev.forEach((f) => {
+            if (!newFilesMap.has(f.id)) {
+              newFilesMap.set(f.id, f);
+            }
+          });
+          return Array.from(newFilesMap.values());
+        });
       }
     } catch {}
   }, []);
