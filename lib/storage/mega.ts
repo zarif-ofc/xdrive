@@ -240,9 +240,12 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
   const storage = await getMegaStorage();
   if (!storage) return [];
 
+  const isVercel = process.env.VERCEL === '1' || !!process.env.AWS_LAMBDA_FUNCTION_NAME;
   let reloadError = null;
-  // If tree is not loaded (empty children), attempt to reload
-  if (!storage.root || !storage.root.children || storage.root.children.length === 0) {
+  // Always reload on Vercel (tree may be stale or empty on cold starts),
+  // and on non-Vercel only if the tree looks empty.
+  const shouldReload = isVercel || !storage.root || !storage.root.children || storage.root.children.length === 0;
+  if (shouldReload) {
     try {
       await Promise.race([
         storage.reload(),
@@ -297,7 +300,9 @@ export async function scanMegaFiles(): Promise<CloudFileNode[]> {
   }
 
   if (results.length === 0) {
-    throw new Error(`MEGA returned 0 nodes. Root exists: ${!!storage.root}. Children count: ${storage.root?.children?.length}. Files count: ${Object.keys((storage as any).files || {}).length}. Reload error: ${reloadError}`);
+    console.warn(`[Diagnostic] MEGA scan found 0 nodes. Root exists: ${!!storage.root}. Children count: ${storage.root?.children?.length}. Files count: ${Object.keys((storage as any).files || {}).length}. Reload error: ${reloadError}`);
+    // Don't throw — on Vercel cold starts the tree may not be loaded yet.
+    // Returning an empty array lets the sync pipeline continue with Filen results.
   }
 
   console.log(`[Diagnostic] scanMegaFiles found ${results.length} MEGA nodes.`);

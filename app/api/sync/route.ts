@@ -7,13 +7,26 @@ export const dynamic = 'force-dynamic';
 // We allow 60 seconds because tree walking remote providers can take a bit of time
 export const maxDuration = 60;
 
+/**
+ * Scans MEGA with a single retry — the first attempt can return 0 nodes
+ * because the MEGA SDK tree needs a moment to populate after authentication.
+ */
+async function scanMegaWithRetry(): Promise<Awaited<ReturnType<typeof scanMegaFiles>>> {
+  const firstAttempt = await scanMegaFiles();
+  if (firstAttempt.length > 0) return firstAttempt;
+
+  // Tree may not be loaded yet on a cold start — wait briefly and retry once
+  await new Promise((r) => setTimeout(r, 3000));
+  return scanMegaFiles();
+}
+
 export async function POST() {
   try {
     console.log('[Sync] Starting global cloud file synchronization...');
 
     // Run scans concurrently for speed
     const [megaNodes, filenNodes] = await Promise.all([
-      scanMegaFiles().catch((err) => {
+      scanMegaWithRetry().catch((err) => {
         console.warn('MEGA scan failed:', err);
         return [];
       }),
