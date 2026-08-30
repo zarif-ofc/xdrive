@@ -35,9 +35,9 @@ export const UploadProgressModal: React.FC<UploadProgressModalProps> = ({
   const completedCount = uploads.filter((u) => u.status === 'completed').length;
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-96 bg-drive-surface border border-drive-border rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-5">
+    <div className="fixed bottom-14 sm:bottom-4 left-3 right-3 sm:left-auto sm:right-4 z-40 sm:w-96 bg-[#0a0a0c] border border-zinc-800 rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-5 font-mono">
       {/* Header Bar */}
-      <div className="bg-drive-hover px-4 py-3 flex items-center justify-between border-b border-drive-border">
+      <div className="bg-[#121215] px-4 py-3 flex items-center justify-between border-b border-zinc-800">
         <div className="flex items-center gap-2">
           {activeCount > 0 ? (
             <Loader2 className="w-4 h-4 text-drive-accent animate-spin" />
@@ -79,24 +79,28 @@ export const UploadProgressModal: React.FC<UploadProgressModalProps> = ({
 
               {/* Progress Bar & Status */}
               <div className="flex items-center justify-between gap-3">
-                <div className="flex-1 bg-drive-bg h-2 rounded-full overflow-hidden">
+                <div className="flex-1 bg-zinc-800/60 h-1.5 rounded-full overflow-hidden relative">
                   <div
-                    className={`h-full transition-all duration-300 rounded-full ${
+                    className={`h-full transition-all duration-300 rounded-full relative overflow-hidden ${
                       item.status === 'completed'
                         ? 'bg-emerald-500'
                         : item.status === 'error'
                         ? 'bg-rose-500'
-                        : 'bg-drive-accent'
+                        : 'bg-[#ff2b38]'
                     }`}
                     style={{ width: `${item.progress}%` }}
-                  />
+                  >
+                    {item.status === 'uploading' && (
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+                    )}
+                  </div>
                 </div>
 
                 {item.provider && <ProviderBadge provider={item.provider} size="sm" />}
 
-                {item.status === 'completed' && <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />}
-                {item.status === 'uploading' && <Loader2 className="w-3.5 h-3.5 text-drive-accent animate-spin shrink-0" />}
-                {item.status === 'error' && <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+                {item.status === 'completed' && <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
+                {item.status === 'uploading' && <Loader2 className="w-3.5 h-3.5 text-zinc-400 animate-spin shrink-0" />}
+                {item.status === 'error' && <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
               </div>
 
               {item.errorMsg && <p className="text-[11px] text-rose-400 font-medium">{item.errorMsg}</p>}

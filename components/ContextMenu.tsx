@@ -50,16 +50,16 @@ export const ContextMenu: React.FC<ContextMenuProps> = ({
   }, [onClose]);
 
   // Constrain menu position within screen bounds
-  const adjustedX = Math.min(x, typeof window !== 'undefined' ? window.innerWidth - 220 : x);
-  const adjustedY = Math.min(y, typeof window !== 'undefined' ? window.innerHeight - 240 : y);
+  const adjustedX = Math.max(8, Math.min(x, typeof window !== 'undefined' ? window.innerWidth - 210 : x));
+  const adjustedY = Math.max(8, Math.min(y, typeof window !== 'undefined' ? window.innerHeight - 280 : y));
 
   return (
     <div
       ref={menuRef}
       style={{ top: `${adjustedY}px`, left: `${adjustedX}px` }}
-      className="fixed z-50 w-52 bg-drive-surface border border-drive-border rounded-xl shadow-2xl py-1 text-sm text-drive-text select-none animate-in fade-in zoom-in-95"
+      className="fixed z-50 w-48 sm:w-52 bg-[#0d0d10] border border-zinc-800 rounded-xl shadow-2xl py-1 text-xs sm:text-sm text-zinc-200 select-none animate-in fade-in zoom-in-95 font-mono"
     >
-      <div className="px-3 py-2 border-b border-drive-border/50 text-xs font-semibold text-drive-muted truncate">
+      <div className="px-3 py-2 border-b border-zinc-800/80 text-[11px] font-semibold text-zinc-400 truncate">
         {file.name}
       </div>
 

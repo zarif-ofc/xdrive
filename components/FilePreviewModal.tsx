@@ -11,20 +11,15 @@ interface FilePreviewModalProps {
   onDownload: (file: FileRecord) => void;
 }
 
-/* ── Premium OLED Crimson Dual Spinner Loader ── */
-const PremiumLoader: React.FC = () => (
-  <div className="flex flex-col items-center justify-center space-y-3.5 p-6 select-none">
-    <div className="relative w-12 h-12 flex items-center justify-center">
-      {/* Outer Crimson Spinning Ring */}
-      <div className="absolute inset-0 rounded-full border-2 border-t-[#ff2b38] border-r-transparent border-b-[#ff2b38]/40 border-l-transparent animate-spin duration-700" />
-      {/* Inner Fast White Ring */}
-      <div className="absolute inset-2 rounded-full border-2 border-t-white border-r-transparent border-b-transparent border-l-transparent animate-spin duration-500" />
-      {/* Center Glowing Dot */}
-      <div className="w-2.5 h-2.5 rounded-full bg-[#ff2b38] shadow-[0_0_12px_#ff2b38] animate-pulse" />
-    </div>
-    <span className="text-[10px] font-mono tracking-widest text-zinc-400 uppercase animate-pulse">
-      Loading...
-    </span>
+/* ── Minimal Flat Loader ── */
+const PremiumLoader: React.FC<{ fileName?: string }> = ({ fileName }) => (
+  <div className="flex flex-col items-center justify-center space-y-3 p-6 select-none font-mono">
+    <div className="w-8 h-8 rounded-full border border-zinc-800 border-t-[#ff2b38] animate-spin" />
+    {fileName && (
+      <span className="text-[11px] text-zinc-500 truncate max-w-[220px]">
+        {fileName}
+      </span>
+    )}
   </div>
 );
 
@@ -88,17 +83,40 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-in fade-in duration-150 select-none"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-150 select-none overflow-hidden"
     >
       {/* Pure Content Modal (Headerless / Borderless) */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative max-w-[90vw] max-h-[90vh] flex items-center justify-center overflow-hidden"
+        className="relative max-w-[92vw] sm:max-w-[85vw] max-h-[85vh] flex items-center justify-center overflow-hidden rounded-2xl"
       >
         {/* Premium Loader Overlay (Shown while media is loading) */}
         {!isMediaLoaded && (
-          <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/60 backdrop-blur-sm rounded-2xl">
-            <PremiumLoader />
+          <div className="flex flex-col items-center justify-center min-w-[260px] min-h-[200px] sm:min-w-[480px] sm:min-h-[320px] bg-[#0a0a0c] border border-zinc-800 rounded-2xl relative overflow-hidden shadow-2xl p-4 sm:p-6">
+            {/* Shimmering Skeleton Background */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-800/20 to-transparent animate-shimmer" />
+
+            {/* Skeleton Placeholders for Content */}
+            {fileCategory === 'text' ? (
+              <div className="w-full space-y-3 opacity-40">
+                <div className="h-4 w-1/3 bg-zinc-800 rounded-md animate-pulse" />
+                <div className="h-3 w-4/5 bg-zinc-800/60 rounded animate-pulse" />
+                <div className="h-3 w-2/3 bg-zinc-800/60 rounded animate-pulse" />
+                <div className="h-3 w-3/4 bg-zinc-800/60 rounded animate-pulse" />
+                <div className="h-3 w-1/2 bg-zinc-800/60 rounded animate-pulse" />
+                <div className="h-3 w-5/6 bg-zinc-800/60 rounded animate-pulse" />
+              </div>
+            ) : fileCategory === 'pdf' ? (
+              <div className="w-full h-full flex flex-col items-center justify-center space-y-4 opacity-40">
+                <div className="w-16 h-20 bg-zinc-800 rounded-lg animate-pulse" />
+                <div className="h-3 w-32 bg-zinc-800 rounded animate-pulse" />
+              </div>
+            ) : null}
+
+            {/* Floating Crimson Center Loader */}
+            <div className="relative z-10">
+              <PremiumLoader fileName={file.name} />
+            </div>
           </div>
         )}
 
@@ -109,8 +127,8 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             alt={file.name}
             onLoad={() => setIsMediaLoaded(true)}
             onError={() => setIsMediaLoaded(true)}
-            className={`max-h-[85vh] max-w-[85vw] object-contain rounded-2xl shadow-2xl transition-opacity duration-300 ${
-              isMediaLoaded ? 'opacity-100' : 'opacity-0'
+            className={`max-h-[75vh] sm:max-h-[80vh] max-w-[90vw] sm:max-w-[80vw] w-auto h-auto object-contain rounded-2xl shadow-2xl transition-opacity duration-300 ${
+              isMediaLoaded ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
             }`}
           />
         )}
@@ -118,12 +136,12 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
         {/* ── Audio Item ── */}
         {fileCategory === 'audio' && (
           <div
-            className={`flex flex-col items-center justify-center p-8 bg-[#0a0a0c] border border-zinc-800/90 rounded-2xl max-w-md w-full shadow-2xl space-y-6 font-mono transition-opacity duration-300 ${
-              isMediaLoaded ? 'opacity-100' : 'opacity-0'
+            className={`flex flex-col items-center justify-center p-4 sm:p-6 bg-[#0a0a0c] border border-zinc-800/90 rounded-2xl max-w-[90vw] sm:max-w-sm w-full shadow-2xl space-y-4 font-mono transition-opacity duration-300 ${
+              isMediaLoaded ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
             }`}
           >
-            <div className="w-24 h-24 rounded-full bg-[#ff2b38]/10 border border-[#ff2b38]/30 flex items-center justify-center shadow-inner relative animate-pulse">
-              <Music className="w-12 h-12 text-[#ff2b38]" />
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-[#ff2b38]/10 border border-[#ff2b38]/30 flex items-center justify-center shadow-inner relative animate-pulse">
+              <Music className="w-8 h-8 sm:w-10 sm:h-10 text-[#ff2b38]" />
             </div>
             <audio
               controls
@@ -144,8 +162,8 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             src={downloadUrl}
             onCanPlay={() => setIsMediaLoaded(true)}
             onLoadedData={() => setIsMediaLoaded(true)}
-            className={`max-h-[85vh] max-w-[85vw] rounded-2xl shadow-2xl border border-zinc-800 bg-black transition-opacity duration-300 ${
-              isMediaLoaded ? 'opacity-100' : 'opacity-0'
+            className={`max-h-[75vh] sm:max-h-[80vh] max-w-[90vw] sm:max-w-[80vw] w-auto h-auto rounded-2xl shadow-2xl border border-zinc-800 bg-black transition-opacity duration-300 ${
+              isMediaLoaded ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
             }`}
           >
             Your browser does not support video playback.
@@ -158,18 +176,16 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
             src={downloadUrl}
             title={file.name}
             onLoad={() => setIsMediaLoaded(true)}
-            className={`w-[80vw] h-[85vh] rounded-2xl border border-zinc-800 bg-white transition-opacity duration-300 ${
-              isMediaLoaded ? 'opacity-100' : 'opacity-0'
+            className={`w-[90vw] sm:w-[80vw] max-w-4xl h-[75vh] sm:h-[80vh] rounded-2xl border border-zinc-800 bg-white transition-opacity duration-300 ${
+              isMediaLoaded ? 'opacity-100' : 'opacity-0 absolute pointer-events-none'
             }`}
           />
         )}
 
         {/* ── Text / Code Item ── */}
-        {fileCategory === 'text' && (
+        {fileCategory === 'text' && isMediaLoaded && (
           <div
-            className={`w-[80vw] max-w-3xl max-h-[80vh] bg-[#0a0a0c] border border-zinc-800 rounded-2xl overflow-auto shadow-2xl p-6 font-mono text-xs text-zinc-300 select-text transition-opacity duration-300 ${
-              isMediaLoaded ? 'opacity-100' : 'opacity-0'
-            }`}
+            className="w-[90vw] sm:w-[80vw] max-w-2xl max-h-[75vh] bg-[#0a0a0c] border border-zinc-800 rounded-2xl overflow-auto shadow-2xl p-4 sm:p-6 font-mono text-xs sm:text-sm text-zinc-300 select-text transition-opacity duration-300 animate-in fade-in"
           >
             {textError ? (
               <div className="flex flex-col items-center justify-center text-red-400 p-8 text-center space-y-2 font-mono">
@@ -184,9 +200,9 @@ export const FilePreviewModal: React.FC<FilePreviewModalProps> = ({
 
         {/* ── Fallback / Unsupported Item ── */}
         {fileCategory === 'unsupported' && (
-          <div className="flex flex-col items-center justify-center text-center p-8 space-y-4 max-w-sm bg-[#0a0a0c] border border-zinc-800 rounded-2xl font-mono">
-            <div className="w-16 h-16 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
-              <Eye className="w-8 h-8 text-zinc-400" />
+          <div className="flex flex-col items-center justify-center text-center p-6 space-y-3 max-w-xs bg-[#0a0a0c] border border-zinc-800 rounded-2xl font-mono">
+            <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500">
+              <Eye className="w-7 h-7 text-zinc-400" />
             </div>
             <div>
               <p className="text-xs text-zinc-400">No inline preview available</p>

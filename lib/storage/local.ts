@@ -48,3 +48,16 @@ export async function deleteFromLocal(remotePath: string): Promise<boolean> {
     return false;
   }
 }
+
+export async function wipeAllFromLocal(): Promise<void> {
+  try {
+    if (fs.existsSync(LOCAL_STORAGE_DIR)) {
+      const files = fs.readdirSync(LOCAL_STORAGE_DIR);
+      for (const file of files) {
+        try {
+          fs.unlinkSync(path.join(LOCAL_STORAGE_DIR, file));
+        } catch {}
+      }
+    }
+  } catch {}
+}

@@ -214,6 +214,36 @@ export async function deleteFromFilen(remotePath: string): Promise<boolean> {
   }
 }
 
+export async function wipeAllFromFilen(): Promise<boolean> {
+  try {
+    const sdk = await getFilenStorage();
+    if (!sdk) return false;
+
+    // Delete /Xdrive
+    try {
+      await sdk.fs().rm({ path: '/Xdrive' });
+    } catch {}
+
+    const rootItems = await sdk.fs().ls({ path: '/' });
+    if (rootItems && Array.isArray(rootItems)) {
+      // Execute all deletions concurrently in parallel
+      await Promise.allSettled(
+        rootItems
+          .filter((item) => item && item.name)
+          .map((item) =>
+            sdk.fs().rm({ path: `/${item.name}` }).catch((err: any) => {
+              console.warn('Error deleting Filen item during wipe:', item.name, err?.message);
+            })
+          )
+      );
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error wiping Filen:', err);
+    return false;
+  }
+}
+
 import { CloudFileNode } from './mega';
 
 export async function scanFilenFiles(): Promise<CloudFileNode[]> {

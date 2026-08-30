@@ -155,6 +155,11 @@ export function deleteFileRecord(id: string): boolean {
   return result.changes > 0;
 }
 
+export function deleteAllFileRecords(): void {
+  const db = getDb();
+  db.prepare(`DELETE FROM files`).run();
+}
+
 export function getStorageStatsFromDb(): { megaUsed: number; filenUsed: number; totalUsed: number; count: number } {
   const db = getDb();
   const row = db.prepare(`

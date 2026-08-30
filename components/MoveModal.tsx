@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { FileRecord } from '@/lib/db';
-import { X, FolderInput, HardDrive, Folder } from 'lucide-react';
+import { X, FolderInput, HardDrive, Folder, Loader2 } from 'lucide-react';
 
 interface MoveModalProps {
   file: FileRecord | null;
@@ -20,38 +20,42 @@ export const MoveModal: React.FC<MoveModalProps> = ({
   onMove,
 }) => {
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (!isOpen || !file) return null;
 
   // Filter out the file itself (if it's a folder) to prevent moving into itself
   const validFolders = availableFolders.filter((f) => f.id !== file.id && f.is_folder === 1);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onMove(file.id, selectedFolderId);
+    setIsSubmitting(true);
+    await onMove(file.id, selectedFolderId);
+    setIsSubmitting(false);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-drive-surface border border-drive-border w-full max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-drive-border">
-          <div className="flex items-center gap-2 text-white font-semibold">
-            <FolderInput className="w-5 h-5 text-purple-400" />
-            <span>Move &quot;{file.name}&quot;</span>
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+      <div className="bg-[#0a0a0c] border border-zinc-800 w-full max-w-[92vw] sm:max-w-md rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 font-mono">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-800">
+          <div className="flex items-center gap-2 text-white font-semibold text-sm sm:text-base">
+            <FolderInput className="w-4 h-4 sm:w-5 sm:h-5 text-purple-400" />
+            <span className="truncate max-w-[200px] sm:max-w-[260px]">Move &quot;{file.name}&quot;</span>
           </div>
-          <button onClick={onClose} className="text-drive-muted hover:text-white transition-colors">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} disabled={isSubmitting} className="text-zinc-500 hover:text-white transition-colors">
+            <X className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4">
           <p className="text-xs text-drive-muted">Select destination folder:</p>
 
           <div className="max-h-60 overflow-y-auto space-y-1 bg-drive-bg p-2 rounded-xl border border-drive-border">
             {/* Root item */}
             <button
               type="button"
+              disabled={isSubmitting}
               onClick={() => setSelectedFolderId(null)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                 selectedFolderId === null
@@ -67,6 +71,7 @@ export const MoveModal: React.FC<MoveModalProps> = ({
               <button
                 key={folder.id}
                 type="button"
+                disabled={isSubmitting}
                 onClick={() => setSelectedFolderId(folder.id)}
                 className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   selectedFolderId === folder.id
@@ -78,21 +83,30 @@ export const MoveModal: React.FC<MoveModalProps> = ({
                 <span className="truncate">{folder.name}</span>
               </button>
             ))}
+
+            {validFolders.length === 0 && (
+              <div className="py-2 px-3 text-xs text-zinc-600 font-mono italic">
+                (No subfolders available)
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-sm font-medium text-drive-muted hover:bg-drive-hover transition-colors"
+              disabled={isSubmitting}
+              className="px-4 py-2 rounded-xl text-sm font-medium text-drive-muted hover:bg-drive-hover transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl text-sm font-semibold bg-drive-accent text-drive-bg hover:opacity-90 transition-opacity"
+              disabled={isSubmitting}
+              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold bg-drive-accent text-drive-bg hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              Move Here
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              <span>{isSubmitting ? 'Moving...' : 'Move Here'}</span>
             </button>
           </div>
         </form>

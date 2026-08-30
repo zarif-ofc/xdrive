@@ -10,7 +10,7 @@ import { FilePreviewModal } from '@/components/FilePreviewModal';
 import { FileRecord } from '@/lib/db';
 import { StorageMetrics } from '@/lib/storage/router';
 import { formatBytes } from '@/lib/utils';
-import { Plus, File, Video, Image as ImageIcon, Music, FileText, Terminal as TerminalIcon, Lock, Unlock } from 'lucide-react';
+import { Plus, File, Video, Image as ImageIcon, Music, FileText, Terminal as TerminalIcon, Loader2, Folder } from 'lucide-react';
 
 /* Helper to strip extension from filename */
 const getDisplayName = (filename: string) => {
@@ -111,48 +111,80 @@ const TerminalFileListItem: React.FC<{
       onMouseLeave={onMouseLeave}
       onDoubleClick={onPreview}
       onContextMenu={onContextMenu}
-      className={`group flex items-center justify-between px-4 py-2.5 rounded-lg cursor-pointer transition-all duration-100 font-mono text-xs select-none border ${
+      className={`group flex items-center justify-between px-3.5 sm:px-5 py-2.5 sm:py-3.5 rounded-xl cursor-pointer transition-colors duration-150 font-mono text-xs sm:text-sm select-none border gap-2.5 sm:gap-4 ${
         isSelected
-          ? 'bg-[#18181c] border-[#ff2b38] text-white shadow-sm'
-          : 'bg-[#0a0a0c] border-zinc-900 hover:bg-[#121215] hover:border-zinc-800 text-zinc-300'
+          ? 'bg-[#151518] border-zinc-700 text-white shadow-sm'
+          : 'bg-[#08080a] border-zinc-900 hover:bg-[#101014] hover:border-zinc-800 text-zinc-300'
       }`}
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
+      <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
         <CategoryIcon
-          className={`w-4 h-4 shrink-0 transition-colors ${
+          className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 transition-colors duration-150 ${
             isSelected ? 'text-[#ff2b38]' : 'text-zinc-500 group-hover:text-zinc-300'
           }`}
         />
-        <span className="font-medium truncate" title={file.name}>
+        <span className="font-medium truncate text-xs sm:text-sm tracking-tight" title={file.name}>
           {displayName}
         </span>
       </div>
 
-      <div className="flex items-center gap-6 text-[11px] shrink-0 text-zinc-500">
-        <span className="px-1.5 py-0.5 rounded bg-zinc-900 text-zinc-400 font-mono text-[10px] uppercase">
+      <div className="flex items-center gap-2.5 sm:gap-6 text-[10px] sm:text-xs shrink-0 text-zinc-500">
+        <span className="px-1.5 sm:px-2 py-0.5 rounded bg-zinc-900/90 border border-zinc-800/60 text-zinc-400 font-mono text-[9px] sm:text-xs uppercase font-medium">
           {file.provider}
         </span>
-        <span className="w-20 text-right font-mono">{formatBytes(file.size)}</span>
+        <span className="w-16 sm:w-24 text-right font-mono text-[10px] sm:text-xs text-zinc-400">{formatBytes(file.size)}</span>
       </div>
     </div>
   );
 };
 
+/* ─── Terminal Style File List Item Skeleton ─── */
+const TerminalFileListSkeleton: React.FC = () => (
+  <div className="flex flex-col gap-1.5 sm:gap-2 w-full select-none">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <div
+        key={i}
+        className="group flex items-center justify-between px-3.5 sm:px-5 py-2.5 sm:py-3.5 rounded-xl border border-zinc-900/80 bg-[#08080a] relative overflow-hidden gap-2.5 sm:gap-4"
+      >
+        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-800/15 to-transparent animate-shimmer" />
+        <div className="flex items-center gap-2.5 sm:gap-4 min-w-0 flex-1">
+          <div className="w-4 h-4 sm:w-5 sm:h-5 rounded bg-zinc-850 animate-pulse shrink-0" />
+          <div
+            className="h-3.5 sm:h-4 bg-zinc-850/80 rounded animate-pulse"
+            style={{ width: `${35 + ((i * 17) % 35)}%` }}
+          />
+        </div>
+        <div className="flex items-center gap-2.5 sm:gap-6 shrink-0">
+          <div className="w-10 sm:w-14 h-4 sm:h-5 rounded bg-zinc-900 animate-pulse" />
+          <div className="w-12 sm:w-16 h-3.5 sm:h-4 rounded bg-zinc-850/60 animate-pulse" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
 export default function Home() {
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [commandInput, setCommandInput] = useState('');
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
+  const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+  const [isNavigatingFiles, setIsNavigatingFiles] = useState<boolean>(false);
   const [hoveredFile, setHoveredFile] = useState<FileRecord | null>(null);
+
+  // Async Loading States
+  const [isLoadingFiles, setIsLoadingFiles] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+
+  // rm -rf Confirmation State
+  const [isAwaitingRmRfPass, setIsAwaitingRmRfPass] = useState<boolean>(false);
 
   // Authentication State (Starts locked on every visit)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   // Terminal History Logs
-  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([
-    { id: 'lock_notice', type: 'error', text: '[LOCKED] Type /pass <password> to unlock Xdrive' },
-  ]);
+  const [terminalLogs, setTerminalLogs] = useState<{ id: string; type: 'input' | 'output' | 'error'; text: string }[]>([]);
 
-  // Modals
+  // Modals & Menus
+  const [isUploadMenuOpen, setIsUploadMenuOpen] = useState<boolean>(false);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; file: FileRecord } | null>(null);
   const [renameTarget, setRenameTarget] = useState<FileRecord | null>(null);
   const [moveTarget, setMoveTarget] = useState<FileRecord | null>(null);
@@ -164,8 +196,25 @@ export default function Home() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  const uploadMenuRef = useRef<HTMLDivElement>(null);
   const terminalInputRef = useRef<HTMLInputElement>(null);
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
+  const mainContainerRef = useRef<HTMLElement>(null);
+
+  // Close upload menu on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (uploadMenuRef.current && !uploadMenuRef.current.contains(event.target as Node)) {
+        setIsUploadMenuOpen(false);
+      }
+    }
+    if (isUploadMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUploadMenuOpen]);
 
   // Data fetching (only runs after authentication)
   const loadMetrics = useCallback(async () => {
@@ -177,13 +226,13 @@ export default function Home() {
   }, []);
 
   const loadFiles = useCallback(async () => {
+    setIsLoadingFiles(true);
     try {
       const res = await fetch('/api/files?all=true&sort=name_asc');
       const data = await res.json();
       if (data.success && Array.isArray(data.files)) {
         setFiles((prev) => {
           const newFilesMap = new Map<string, FileRecord>(data.files.map((f: FileRecord) => [f.id, f]));
-          // Preserve items already in state (useful for Vercel ephemeral DBs)
           prev.forEach((f) => {
             if (!newFilesMap.has(f.id)) {
               newFilesMap.set(f.id, f);
@@ -192,7 +241,9 @@ export default function Home() {
           return Array.from(newFilesMap.values());
         });
       }
-    } catch {}
+    } catch {} finally {
+      setIsLoadingFiles(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -201,6 +252,7 @@ export default function Home() {
       loadMetrics();
       
       // Automatically run a background cloud sync to pull in any pre-existing MEGA/Filen files
+      setIsSyncing(true);
       fetch('/api/sync', { method: 'POST' })
         .then((res) => res.json())
         .then((data) => {
@@ -209,9 +261,33 @@ export default function Home() {
             loadMetrics();
           }
         })
-        .catch(() => {});
+        .catch(() => {})
+        .finally(() => setIsSyncing(false));
     }
   }, [isAuthenticated, loadFiles, loadMetrics]);
+
+  // Check localStorage for saved device authentication on mount
+  useEffect(() => {
+    try {
+      const savedPass = localStorage.getItem('xdrive_auth_pass');
+      if (savedPass) {
+        fetch('/api/auth', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: savedPass }),
+        })
+          .then((res) => res.json())
+          .then((data) => {
+            if (data.success) {
+              setIsAuthenticated(true);
+            } else {
+              localStorage.removeItem('xdrive_auth_pass');
+            }
+          })
+          .catch(() => {});
+      }
+    } catch {}
+  }, []);
 
   const addLog = (type: 'input' | 'output' | 'error', text: string) => {
     setTerminalLogs((prev) => [...prev, { id: `log_${Date.now()}_${Math.random()}`, type, text }]);
@@ -376,7 +452,36 @@ export default function Home() {
     const rawInput = commandInput.trim();
     if (!rawInput) return;
 
-    // Check for Slash Commands (e.g. /pass <pwd>, /all, /down <name>, /del <name>, /help)
+    // Handle password confirmation for /rm -rf wipe command
+    if (isAwaitingRmRfPass) {
+      addLog('input', `xdrive:~$ ${'*'.repeat(rawInput.length)}`);
+      addLog('output', '[WIPING] Authenticating & purging all files from MEGA, Filen & Database...');
+      setCommandInput('');
+      setIsAwaitingRmRfPass(false);
+      setIsSyncing(true);
+      try {
+        const res = await fetch('/api/wipe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: rawInput }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog('output', 'Wiped successfully');
+          setFiles([]);
+          loadMetrics();
+        } else {
+          addLog('error', `[ERR] Wipe cancelled: ${data.error || 'Invalid password'}`);
+        }
+      } catch (err: any) {
+        addLog('error', `[ERR] Wipe error: ${err.message}`);
+      } finally {
+        setIsSyncing(false);
+      }
+      return;
+    }
+
+    // Check for Slash Commands (e.g. /pass <pwd>, /all, /down <name>, /del <name>, /rm -rf, /help)
     if (rawInput.startsWith('/')) {
       const fullContent = rawInput.substring(1).trim();
       const spaceIndex = fullContent.indexOf(' ');
@@ -391,6 +496,49 @@ export default function Home() {
         command = fullContent.toLowerCase();
       }
 
+      // /rm -rf Total Purge Command
+      if (rawInput === '/rm -rf' || rawInput.startsWith('/rm -rf ') || (command === 'rm' && targetArg.startsWith('-rf'))) {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        const inlinePass = rawInput.startsWith('/rm -rf ')
+          ? rawInput.substring(8).trim()
+          : targetArg.startsWith('-rf ')
+          ? targetArg.substring(4).trim()
+          : '';
+
+        if (inlinePass) {
+          addLog('output', '[WIPING] Authenticating & purging all files from MEGA, Filen & Database...');
+          setCommandInput('');
+          setIsSyncing(true);
+          try {
+            const res = await fetch('/api/wipe', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password: inlinePass }),
+            });
+            const data = await res.json();
+            if (data.success) {
+              addLog('output', 'Wiped successfully');
+              setFiles([]);
+              loadMetrics();
+            } else {
+              addLog('error', `[ERR] Wipe cancelled: ${data.error || 'Invalid password'}`);
+            }
+          } catch (err: any) {
+            addLog('error', `[ERR] Wipe error: ${err.message}`);
+          } finally {
+            setIsSyncing(false);
+          }
+          return;
+        }
+
+        // Ask for access pass
+        addLog('error', '[WARNING] This will PERMANENTLY DELETE every single file & folder from MEGA & Filen.');
+        addLog('output', 'Enter access password to confirm /rm -rf:');
+        setIsAwaitingRmRfPass(true);
+        setCommandInput('');
+        return;
+      }
+
       // Password Authentication Command: /pass <password>
       if (command === 'pass') {
         addLog('input', `xdrive:~$ /pass ${'*'.repeat(targetArg.length || 6)}`);
@@ -402,8 +550,11 @@ export default function Home() {
           });
           const data = await res.json();
           if (data.success) {
+            try {
+              localStorage.setItem('xdrive_auth_pass', targetArg);
+            } catch {}
             setIsAuthenticated(true);
-            addLog('output', '[UNLOCKED] Access granted. Welcome to Xdrive CLI v6.9.0');
+            addLog('output', '[UNLOCKED] Access granted. Remembered on this device.');
             setCommandInput('');
           } else {
             addLog('error', `[ERR] Invalid password. Type /pass <password>`);
@@ -411,6 +562,18 @@ export default function Home() {
         } catch {
           addLog('error', `[ERR] Network error verifying password.`);
         }
+        return;
+      }
+
+      // Logout / Lock Command: /lock or /logout
+      if (['lock', 'logout'].includes(command)) {
+        addLog('input', `xdrive:~$ ${rawInput}`);
+        try {
+          localStorage.removeItem('xdrive_auth_pass');
+        } catch {}
+        setIsAuthenticated(false);
+        setCommandInput('');
+        addLog('error', '[LOCKED] Device logged out. Type /pass <password> to unlock');
         return;
       }
 
@@ -473,6 +636,7 @@ export default function Home() {
         addLog('input', `xdrive:~$ ${rawInput}`);
         addLog('output', '[SYNC] Starting global synchronization from MEGA & Filen...');
         setCommandInput('');
+        setIsSyncing(true);
         try {
           const res = await fetch('/api/sync', { method: 'POST' });
           const data = await res.json();
@@ -485,6 +649,8 @@ export default function Home() {
           }
         } catch (err: any) {
           addLog('error', `[ERR] Sync failed: ${err.message}`);
+        } finally {
+          setIsSyncing(false);
         }
         return;
       }
@@ -499,7 +665,9 @@ export default function Home() {
         addLog('output', '  /foldername           View files inside a folder');
         addLog('output', '  /down <file/folder>   Download file or zip folder');
         addLog('output', '  /del <file/folder>    Delete file or folder');
+        addLog('output', '  /rm -rf               Purge all files from MEGA, Filen & Database');
         addLog('output', '  /sync                 Sync pre-existing files from cloud providers');
+        addLog('output', '  /lock, /logout        Lock device and end session');
         addLog('output', '  clear, cls            Clear terminal log screen');
         return;
       }
@@ -535,7 +703,7 @@ export default function Home() {
     }
 
     const filtered = getFilteredFiles();
-    if (filtered.length > 0 && selectedIndex < filtered.length) {
+    if (isNavigatingFiles && filtered.length > 0 && selectedIndex >= 0 && selectedIndex < filtered.length) {
       setPreviewTarget(filtered[selectedIndex]);
     }
   };
@@ -665,28 +833,61 @@ export default function Home() {
 
   // Reset selected index when query changes
   useEffect(() => {
-    setSelectedIndex(0);
+    setSelectedIndex(-1);
+    setIsNavigatingFiles(false);
   }, [commandInput]);
 
-  // Scroll selected item into view automatically
+  // Scroll selected item into view strictly within the main scroll container
   useEffect(() => {
-    if (selectedItemRef.current) {
-      selectedItemRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    if (isNavigatingFiles && selectedItemRef.current && mainContainerRef.current) {
+      if (selectedIndex === 0) {
+        mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      const container = mainContainerRef.current;
+      const element = selectedItemRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const elementRect = element.getBoundingClientRect();
+
+      const relativeTop = elementRect.top - containerRect.top;
+      const relativeBottom = elementRect.bottom - containerRect.top;
+
+      if (relativeTop < 20) {
+        container.scrollBy({ top: relativeTop - 30, behavior: 'smooth' });
+      } else if (relativeBottom > container.clientHeight - 90) {
+        container.scrollBy({ top: relativeBottom - container.clientHeight + 100, behavior: 'smooth' });
+      }
+    } else if (!isNavigatingFiles && mainContainerRef.current && selectedIndex === -1) {
+      mainContainerRef.current.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [selectedIndex]);
+  }, [selectedIndex, isNavigatingFiles]);
 
   const isSpacePeekingRef = useRef<boolean>(false);
 
-  // Spacebar Quick Look peek functionality STRICTLY on hover over a file item
+  // Spacebar Quick Look peek functionality ONLY active when cursor is NOT visible (isNavigatingFiles === true)
   useEffect(() => {
     const handleWindowKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.key === ' ' || e.keyCode === 32) {
-        // ONLY trigger peek if mouse is currently hovering over a file
-        if (hoveredFile && !isSpacePeekingRef.current) {
+        // Strict guard: if cursor is visible (!isNavigatingFiles), peek is disabled
+        if (!isNavigatingFiles) return;
+
+        const target = selectedIndex >= 0 && selectedIndex < filteredFiles.length ? filteredFiles[selectedIndex] : null;
+        if (target && !isSpacePeekingRef.current) {
           e.preventDefault();
           isSpacePeekingRef.current = true;
-          setPreviewTarget(hoveredFile);
+          setPreviewTarget(target);
         }
+        return;
+      }
+
+      // If ArrowUp is pressed while hovering/navigating on top file -> return to cursor
+      if (e.key === 'ArrowUp' && (selectedIndex === 0 || (hoveredFile && filteredFiles[0]?.id === hoveredFile.id))) {
+        e.preventDefault();
+        setIsNavigatingFiles(false);
+        setSelectedIndex(-1);
+        setHoveredFile(null);
+        terminalInputRef.current?.focus();
       }
     };
 
@@ -707,7 +908,7 @@ export default function Home() {
       window.removeEventListener('keydown', handleWindowKeyDown);
       window.removeEventListener('keyup', handleWindowKeyUp);
     };
-  }, [hoveredFile]);
+  }, [isNavigatingFiles, selectedIndex, filteredFiles, hoveredFile]);
 
   // Keyboard navigation for Up / Down Arrow keys
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -715,10 +916,52 @@ export default function Home() {
 
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev + 1) % filteredFiles.length);
+      if (!isNavigatingFiles) {
+        setIsNavigatingFiles(true);
+        setSelectedIndex(0);
+      } else {
+        setSelectedIndex((prev) => Math.min(prev + 1, filteredFiles.length - 1));
+      }
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setSelectedIndex((prev) => (prev - 1 + filteredFiles.length) % filteredFiles.length);
+      if (isNavigatingFiles) {
+        if (selectedIndex > 0) {
+          setSelectedIndex((prev) => prev - 1);
+        } else {
+          // Reached top file and pressed Up -> return to command prompt input with cursor visible
+          setIsNavigatingFiles(false);
+          setSelectedIndex(-1);
+          setHoveredFile(null);
+          terminalInputRef.current?.focus();
+        }
+      } else {
+        setIsNavigatingFiles(false);
+        setSelectedIndex(-1);
+        setHoveredFile(null);
+        terminalInputRef.current?.focus();
+      }
+    } else if (e.key === ' ' || e.code === 'Space') {
+      // If cursor is off (navigating files), intercept space for peeking
+      if (isNavigatingFiles) {
+        e.preventDefault();
+        const target = selectedIndex >= 0 && selectedIndex < filteredFiles.length ? filteredFiles[selectedIndex] : null;
+        if (target && !isSpacePeekingRef.current) {
+          isSpacePeekingRef.current = true;
+          setPreviewTarget(target);
+        }
+      }
+      // If cursor is visible, do not preventDefault - space works for normal typing
+    } else if (e.key === 'Enter') {
+      if (isNavigatingFiles && selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+        e.preventDefault();
+        setPreviewTarget(filteredFiles[selectedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      if (isNavigatingFiles) {
+        e.preventDefault();
+        setIsNavigatingFiles(false);
+        setSelectedIndex(-1);
+      }
     }
   };
 
@@ -729,8 +972,12 @@ export default function Home() {
   return (
     <div
       onContextMenu={(e) => e.preventDefault()}
-      onClick={() => terminalInputRef.current?.focus()}
-      className="h-screen w-screen bg-[#000000] text-zinc-300 font-mono overflow-hidden flex flex-col select-none"
+      onClick={() => {
+        setIsNavigatingFiles(false);
+        setSelectedIndex(-1);
+        terminalInputRef.current?.focus();
+      }}
+      className="h-screen w-full bg-[#000000] text-zinc-300 font-mono overflow-hidden flex flex-col select-none"
     >
       <DropZoneOverlay onFilesDropped={handleUploadFiles} />
 
@@ -762,53 +1009,72 @@ export default function Home() {
         }}
       />
 
-      {/* ── Top Bar Header ── */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-900 bg-black/80 z-10">
-        <div className="flex items-center gap-2">
-          <TerminalIcon className="w-4 h-4 text-[#ff2b38]" />
-          <span className="text-xs font-bold text-white tracking-wide uppercase">XDRIVE PROMPT</span>
-          <span className="text-[10px] text-zinc-600 font-medium">v6.9.0</span>
-          {isAuthenticated ? (
-            <span className="flex items-center gap-1 ml-3 px-1.5 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-400 text-[10px]">
-              <Unlock className="w-3 h-3" /> UNLOCKED
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 ml-3 px-1.5 py-0.5 rounded bg-red-950/60 border border-red-800/60 text-red-400 text-[10px]">
-              <Lock className="w-3 h-3" /> LOCKED
-            </span>
+      {/* ── Top Bar Header (Permanently pinned at top) ── */}
+      <header className="sticky top-0 z-30 shrink-0 flex items-center justify-between px-4 sm:px-8 py-3 sm:py-5 border-b border-zinc-900 bg-black">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          <TerminalIcon className="w-4 h-4 sm:w-5 sm:h-5 text-[#ff2b38] shrink-0" />
+          <span className="text-xs sm:text-base font-bold text-white tracking-wide uppercase truncate">XDRIVE PROMPT</span>
+          <span className="text-[10px] sm:text-xs text-zinc-600 font-medium shrink-0">v6.9.0</span>
+          {(isSyncing || isLoadingFiles) && (
+            <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-zinc-500 animate-spin shrink-0" />
           )}
         </div>
 
-        <div className="flex items-center gap-4">
+        <div ref={uploadMenuRef} className="relative flex items-center">
           <button
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               if (!isAuthenticated) {
                 addLog('error', '[LOCKED] Authenticate first with /pass <password>');
                 return;
               }
-              const choice = window.prompt('Type "folder" to upload a folder, or press OK to upload files');
-              if (choice === null) return;
-              if (choice.trim().toLowerCase() === 'folder') {
-                folderInputRef.current?.click();
-              } else {
-                fileInputRef.current?.click();
-              }
+              setIsUploadMenuOpen((prev) => !prev);
             }}
-            className="w-8 h-8 rounded-full bg-[#ff2b38] hover:bg-[#ff3d4a] flex items-center justify-center transition-colors shadow-sm"
-            title="Upload file or folder"
+            className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-all duration-200 shadow-sm ${
+              isUploadMenuOpen
+                ? 'bg-zinc-800 text-white rotate-45'
+                : 'bg-[#ff2b38] hover:bg-[#ff3d4a] text-white'
+            }`}
+            title="Upload options"
           >
-            <Plus className="w-4 h-4 text-white stroke-[2.5]" />
+            <Plus className="w-4 h-4 sm:w-5 sm:h-5 text-white stroke-[2.5]" />
           </button>
+
+          {/* Upload Choice Dropdown Menu */}
+          {isUploadMenuOpen && (
+            <div className="absolute right-0 top-10 sm:top-12 w-44 sm:w-48 bg-[#0d0d10] border border-zinc-800 rounded-xl shadow-2xl py-1 z-50 animate-in fade-in zoom-in-95 text-xs sm:text-sm font-mono overflow-hidden">
+              <button
+                onClick={() => {
+                  setIsUploadMenuOpen(false);
+                  fileInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-2.5 sm:gap-3 px-3 sm:px-3.5 py-2.5 text-zinc-300 hover:text-white hover:bg-[#18181c] transition-colors text-left"
+              >
+                <File className="w-4 h-4 text-[#ff2b38] shrink-0" />
+                <span>Upload Files</span>
+              </button>
+              <button
+                onClick={() => {
+                  setIsUploadMenuOpen(false);
+                  folderInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-2.5 sm:gap-3 px-3 sm:px-3.5 py-2.5 text-zinc-300 hover:text-white hover:bg-[#18181c] transition-colors border-t border-zinc-900/80 text-left"
+              >
+                <Folder className="w-4 h-4 text-yellow-500 shrink-0" />
+                <span>Upload Folder</span>
+              </button>
+            </div>
+          )}
         </div>
-      </div>
+      </header>
 
       {/* ── Main Terminal Command Prompt Container ── */}
-      <main className="flex-1 overflow-y-auto px-6 py-3 flex flex-col items-start justify-start">
+      <main ref={mainContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-8 py-3.5 sm:py-5 pb-24 sm:pb-32 flex flex-col items-start justify-start">
         {/* Command Output Logs */}
         {terminalLogs.length > 0 && (
-          <div className="w-full max-w-4xl space-y-1.5 mb-2 text-xs font-mono">
+          <div className="w-full max-w-5xl space-y-1.5 sm:space-y-2 mb-2 sm:mb-3 text-xs sm:text-sm font-mono">
             {terminalLogs.map((log) => (
-              <div key={log.id} className="leading-relaxed">
+              <div key={log.id} className="leading-relaxed break-words">
                 {log.type === 'input' ? (
                   <span className="text-[#ff2b38] font-bold">{log.text}</span>
                 ) : log.type === 'error' ? (
@@ -822,39 +1088,57 @@ export default function Home() {
         )}
 
         {/* Live Active Command Prompt Input Line */}
-        <form onSubmit={handleTerminalSubmit} className="w-full max-w-4xl flex items-center gap-2 text-sm font-mono mb-2">
-          <span className="text-[#ff2b38] font-bold shrink-0">xdrive:~$</span>
-          <div className="relative flex-1 flex items-center">
+        <form onSubmit={handleTerminalSubmit} className="w-full max-w-5xl flex items-center gap-2 sm:gap-3 text-sm sm:text-lg font-mono mb-3 sm:mb-4">
+          <span className="text-[#ff2b38] font-bold shrink-0 text-sm sm:text-lg">xdrive:~$</span>
+          <div className="relative flex-1 flex items-center min-w-0">
             <input
               ref={terminalInputRef}
               type="text"
               value={commandInput}
               onChange={(e) => setCommandInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={!isAuthenticated ? "Enter pass first.." : ""}
+              placeholder={
+                isAwaitingRmRfPass
+                  ? "Enter access password..."
+                  : !isAuthenticated
+                  ? "Enter pass first.."
+                  : ""
+              }
               autoFocus
-              className="w-full bg-transparent text-white placeholder-zinc-700 outline-none border-none font-mono text-sm caret-[#ff2b38]"
+              className={`w-full bg-transparent text-white placeholder-zinc-700 outline-none border-none font-mono text-sm sm:text-lg ${
+                isNavigatingFiles ? 'caret-transparent' : 'caret-[#ff2b38]'
+              }`}
             />
           </div>
         </form>
 
         {/* Dynamic File LIST View (Navigable with Arrow Keys / Peek strictly on Hover) */}
         {isQueryActive && (
-          <div className="w-full max-w-4xl mt-1 border-t border-zinc-900/80 pt-4">
-            <div className="flex items-center justify-between mb-3 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">
-              <span>Matching Results ({filteredFiles.length})</span>
+          <div className="w-full max-w-5xl mt-1 sm:mt-2 border-t border-zinc-900/80 pt-3 sm:pt-4">
+            <div className="flex items-center justify-between mb-3 text-xs font-mono text-zinc-500 uppercase tracking-wider">
+              <span>Results ({filteredFiles.length})</span>
+              {(isLoadingFiles || isSyncing) && (
+                <div className="flex items-center gap-1.5 text-zinc-500 font-mono text-[11px]">
+                  <Loader2 className="w-3 h-3 animate-spin text-zinc-400" />
+                  <span>Scanning...</span>
+                </div>
+              )}
             </div>
 
-            {filteredFiles.length === 0 ? (
+            {isLoadingFiles && filteredFiles.length === 0 ? (
+              <div className="w-full">
+                <TerminalFileListSkeleton />
+              </div>
+            ) : filteredFiles.length === 0 ? (
               <div className="py-8 text-center">
                 <p className="text-zinc-600 text-xs font-mono">
-                  [NO MATCHES FOUND FOR "{commandInput}"]
+                  No matching files
                 </p>
               </div>
             ) : (
-              <div className="flex flex-col gap-1.5 w-full">
+              <div className="flex flex-col gap-1.5 sm:gap-2 w-full">
                 {filteredFiles.map((file, idx) => {
-                  const isSelected = idx === selectedIndex;
+                  const isSelected = isNavigatingFiles && idx === selectedIndex;
                   return (
                     <TerminalFileListItem
                       key={file.id}
@@ -863,14 +1147,20 @@ export default function Home() {
                       itemRef={isSelected ? (node) => { selectedItemRef.current = node; } : undefined}
                       onSelect={(e) => {
                         e.stopPropagation();
+                        setIsNavigatingFiles(true);
                         setSelectedIndex(idx);
                       }}
-                      onMouseEnter={() => setHoveredFile(file)}
+                      onMouseEnter={() => {
+                        setHoveredFile(file);
+                        setIsNavigatingFiles(true);
+                        setSelectedIndex(idx);
+                      }}
                       onMouseLeave={() => setHoveredFile(null)}
                       onPreview={() => setPreviewTarget(file)}
                       onContextMenu={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
+                        setIsNavigatingFiles(true);
                         setSelectedIndex(idx);
                         setContextMenu({ x: e.clientX, y: e.clientY, file });
                       }}
@@ -884,18 +1174,29 @@ export default function Home() {
       </main>
 
       {/* ── OLED Terminal Bottom Bar ── */}
-      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-1.5 pb-5 pt-6 bg-black border-t border-zinc-900 pointer-events-none z-20 font-mono">
-        <span className="text-[11px] font-bold text-zinc-400 tracking-wider uppercase">
-          {usedPercent}% MEMORY USED
-          <span className="text-zinc-600 ml-2 font-normal text-[10px]">
-            [{formatBytes(usedBytes)} / {formatBytes(totalBytes)}]
+      <div className="fixed bottom-0 left-0 right-0 flex flex-col items-center gap-1.5 sm:gap-2 pb-3 sm:pb-6 pt-2.5 sm:pt-6 bg-black border-t border-zinc-900 pointer-events-none z-20 font-mono">
+        {metrics === null ? (
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="w-24 sm:w-28 h-3 sm:h-3.5 bg-zinc-850 rounded animate-pulse relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-zinc-700/20 to-transparent animate-shimmer" />
+            </div>
+            <div className="w-16 sm:w-20 h-2.5 sm:h-3 bg-zinc-900 rounded animate-pulse" />
+          </div>
+        ) : (
+          <span className="text-[10px] sm:text-sm font-bold text-zinc-300 tracking-wider uppercase">
+            {usedPercent}% MEMORY USED
+            <span className="text-zinc-500 ml-1.5 sm:ml-2 font-normal text-[9px] sm:text-xs">
+              [{formatBytes(usedBytes)} / {formatBytes(totalBytes)}]
+            </span>
           </span>
-        </span>
-        <div className="w-80 sm:w-[440px] h-1 bg-zinc-900 rounded-full overflow-hidden">
+        )}
+        <div className="w-[80vw] max-w-xs sm:max-w-[560px] h-1.5 bg-zinc-900 rounded-full overflow-hidden relative">
           <div
-            className="h-full bg-[#ff2b38] rounded-full transition-all duration-500"
+            className="h-full bg-[#ff2b38] rounded-full transition-all duration-500 relative overflow-hidden"
             style={{ width: `${Math.max(usedPercent, 1)}%` }}
-          />
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent animate-shimmer" />
+          </div>
         </div>
       </div>
 

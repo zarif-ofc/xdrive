@@ -224,6 +224,29 @@ export async function deleteFromMega(remoteId: string, fileName?: string): Promi
   }
 }
 
+export async function wipeAllFromMega(): Promise<boolean> {
+  try {
+    const storage = await getMegaStorage();
+    if (!storage || !storage.root) return false;
+
+    if (storage.root.children && Array.isArray(storage.root.children)) {
+      const children = [...storage.root.children];
+      // Execute deletions concurrently in parallel
+      await Promise.allSettled(
+        children.map((child) =>
+          child.delete(true).catch((err: any) => {
+            console.warn('Error deleting MEGA node during wipe:', child.name, err?.message);
+          })
+        )
+      );
+    }
+    return true;
+  } catch (err) {
+    console.warn('Error wiping MEGA:', err);
+    return false;
+  }
+}
+
 export interface CloudFileNode {
   name: string;
   size: number;
